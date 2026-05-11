@@ -1,7 +1,7 @@
 /**
  * API 客户端
  */
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/v1";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
 
 // 通用响应类型
 export interface ApiResponse<T> {
@@ -193,6 +193,95 @@ export const worksApi = {
 
   delete: (id: number) =>
     request<void>(`/works/${id}`, { method: "DELETE" }),
+};
+
+// ============ LLM 相关 ============
+
+export interface LLMProviderStatus {
+  name: string;
+  tier: string;
+  model: string | null;
+  capabilities: string[];
+  initialized: boolean;
+  available: boolean;
+  cost_per_1k: number | null;
+}
+
+export interface LLMCostSummary {
+  total_cost_usd: number;
+  total_cost_cny: number;
+  call_counts: Record<string, number>;
+  token_counts: Record<string, number>;
+  active_routes: Record<string, string>;
+}
+
+export interface LLMDetectRequest {
+  content_type: "text" | "image" | "video";
+  content: string;
+  content_url?: string;
+  threshold?: number;
+  use_llm_keywords?: boolean;
+  generate_report?: boolean;
+  search_engines?: string[];
+  max_results?: number;
+}
+
+export interface LLMDetectResponse {
+  keywords: string[];
+  keyword_source: "llm" | "rule";
+  results: Array<{
+    url: string;
+    title: string;
+    snippet: string;
+    similarity_score: number;
+    risk_level: string;
+    search_engine: string;
+  }>;
+  llm_report: string | null;
+  provider: string | null;
+  task_id: string | null;
+}
+
+export interface LLMReportRequest {
+  content_type: "text" | "image" | "video";
+  content: string;
+  results: Array<{
+    url: string;
+    title: string;
+    snippet: string;
+    similarity_score: number;
+  }>;
+  threshold?: number;
+}
+
+export const llmApi = {
+  /** 获取所有 Provider 状态 */
+  getProvidersStatus: () =>
+    request<LLMProviderStatus[]>("/llm/providers/status"),
+
+  /** 切换 Provider 或 Tier */
+  switchProvider: (data: { provider_name?: string; tier?: string }) =>
+    request<{ success: boolean; message: string; current_tier?: string }>(
+      "/llm/providers/switch",
+      { method: "POST", body: JSON.stringify(data) }
+    ),
+
+  /** 获取费用汇总 */
+  getCostSummary: () => request<LLMCostSummary>("/llm/providers/cost"),
+
+  /** LLM 增强侵权检测 */
+  detect: (data: LLMDetectRequest) =>
+    request<LLMDetectResponse>("/llm/detect", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  /** 生成 LLM 侵权报告 */
+  generateReport: (data: LLMReportRequest) =>
+    request<{ report: string; provider: string | null }>("/llm/report", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };
 
 // ============ 任务相关 ============
