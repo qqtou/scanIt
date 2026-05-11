@@ -95,6 +95,20 @@ class DouyinProvider(BaseProvider):
                 raise RuntimeError(f"Douyin API error: {result['error']}")
             return result["choices"][0]["message"]["content"]
 
+    async def embed_text(self, text: str) -> list[float]:
+        raise NotImplementedError(
+            f"{self.name} does not support embedding. "
+            "Use a local Ollama embedding model or switch to Zhipu/OpenAI."
+        )
+
+    async def understand_image(
+        self, image_url: str | bytes, prompt: str, **kwargs
+    ) -> dict:
+        raise NotImplementedError(
+            f"{self.name} does not support image understanding. "
+            "Use Zhipu (glm-4v) or Aliyun (qwen-vl-max)."
+        )
+
 
 class ZhipuProvider(BaseProvider):
     """
@@ -207,6 +221,12 @@ class ZhipuProvider(BaseProvider):
         except json.JSONDecodeError:
             return {"raw_response": content}
 
+    async def embed_text(self, text: str) -> list[float]:
+        raise NotImplementedError(
+            f"{self.name} does not support embedding. "
+            "Use a local Ollama embedding model or switch to OpenAI."
+        )
+
 
 class KimiProvider(BaseProvider):
     """
@@ -266,6 +286,20 @@ class KimiProvider(BaseProvider):
             if "error" in result:
                 raise RuntimeError(f"Kimi API error: {result['error']}")
             return result["choices"][0]["message"]["content"]
+
+    async def embed_text(self, text: str) -> list[float]:
+        raise NotImplementedError(
+            f"{self.name} does not support embedding. "
+            "Use a local Ollama embedding model or switch to Zhipu/OpenAI."
+        )
+
+    async def understand_image(
+        self, image_url: str | bytes, prompt: str, **kwargs
+    ) -> dict:
+        raise NotImplementedError(
+            f"{self.name} does not support image understanding. "
+            "Use Zhipu (glm-4v) or Aliyun (qwen-vl-max)."
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
