@@ -1,0 +1,133 @@
+# ScanIt 开发环境 - docker-compose.dev.yml
+# 使用方法: docker-compose -f docker-compose.dev.yml up -d
+
+services:
+  # ========== 后端 API (热重载) ==========
+  backend:
+    build:
+      context: backend
+      dockerfile: Dockerfile.dev
+    container_name: scanit-backend-dev
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/scanit_dev
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - JWT_SECRET_KEY=dev-secret-key-change-in-production
+      - DEBUG=true
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - scanit-network
+
+  # ========== Celery Worker (热重载) ==========
+  celery-worker:
+    build:
+      context: backend
+      dockerfile: Dockerfile.dev
+    container_name: scanit-celery-dev
+    restart: unless-stopped
+    command: celery -A app.core.celery_app worker --loglevel=debug --queues=detection,report,alert,celery
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/scanit_dev
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - scanit-network
+
+  # ========== Celery Beat (热重载) ==========
+  celery-beat:
+    build:
+      context: backend
+      dockerfile: Dockerfile.dev
+    container_name: scanit-celery-beat-dev
+    restart: unless-stopped
+    command: celery -A app.core.celery_app beat --loglevel=debug
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/scanit_dev
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - scanit-network
+
+  # ========== 前端 (Vite 热重载) ==========
+  frontend:
+    image: node:20-alpine
+    container_name: scanit-frontend-dev
+    working_dir: /app
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev -- --host"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000/api/v1
+    depends_on:
+      - backend
+    networks:
+      - scanit-network
+
+  # ========== PostgreSQL ==========
+  postgres:
+    image: postgres:16-alpine
+    container_name: scanit-postgres-dev
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=scanit_dev
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - scanit-network
+
+  # ========== Redis ==========
+  redis:
+    image: redis:7-alpine
+    container_name: scanit-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    networks:
+      - scanit-network
+
+networks:
+  scanit-network:
+    driver: bridge
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:
