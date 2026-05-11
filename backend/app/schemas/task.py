@@ -12,7 +12,7 @@ class TaskBase(BaseModel):
     """任务基础 schema"""
 
     title: str | None = None
-    keywords: list[str] = Field(..., min_length=1)
+    keywords: list[str] = Field(default_factory=list)
     search_engines: list[str] = Field(default=["google"])
     content_types: list[str] = Field(default=["text", "image", "video"])
     max_results: int = Field(default=50, ge=1, le=200)

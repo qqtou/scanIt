@@ -2,8 +2,18 @@
 Pytest 配置和 Fixtures
 """
 import asyncio
+import os
 import pytest
 from typing import AsyncGenerator, Generator
+from pathlib import Path
+
+# 设置测试环境变量
+os.environ["TESTING"] = "true"
+
+# 使用文件数据库而非 in-memory（每个 in-memory 连接会创建独立数据库）
+TEST_DB_PATH = Path(__file__).parent / "test.db"
+TEST_DATABASE_URL = f"sqlite+aiosqlite:///{TEST_DB_PATH}"
+
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -14,12 +24,8 @@ from sqlalchemy.pool import NullPool
 
 from app.main import app
 from app.models.base import Base
-from app.models.user import User
-from app.core.security import get_password_hash
-
-
-# 测试数据库 URL (使用 SQLite 内存数据库)
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+from app.models import User, Work, Task, Result
+from app.api.deps import get_password_hash
 
 
 @pytest.fixture(scope="session")
@@ -33,21 +39,28 @@ def event_loop() -> Generator:
 @pytest.fixture(scope="function")
 async def test_engine():
     """创建测试数据库引擎"""
+    # 使用文件数据库，避免 in-memory 每个连接独立数据库问题
     engine = create_async_engine(
         TEST_DATABASE_URL,
         echo=False,
-        poolclass=NullPool,
+        connect_args={"check_same_thread": False},
     )
     
+    # 创建所有表
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     
     yield engine
     
+    # 清理
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
     
     await engine.dispose()
+    
+    # 删除数据库文件
+    if TEST_DB_PATH.exists():
+        TEST_DB_PATH.unlink()
 
 
 @pytest.fixture(scope="function")
@@ -67,7 +80,7 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
 @pytest.fixture(scope="function")
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """创建测试客户端"""
-    from app.api.deps import get_db
+    from app.models.base import get_db
     
     async def override_get_db():
         yield db_session
@@ -114,12 +127,42 @@ async def admin_user(db_session: AsyncSession) -> User:
 
 
 @pytest.fixture(scope="function")
+async def test_work(db_session: AsyncSession, test_user: User) -> Work:
+    """创建测试作品"""
+    work = Work(
+        user_id=test_user.id,
+        title="测试作品",
+        content_type="text",
+        content_url="https://example.com/test",
+        content_hash="testhash123",
+    )
+    db_session.add(work)
+    await db_session.commit()
+    await db_session.refresh(work)
+    return work
+
+
+@pytest.fixture(scope="function")
+async def test_task(db_session: AsyncSession, test_user: User, test_work: Work) -> Task:
+    """创建测试任务"""
+    task = Task(
+        user_id=test_user.id,
+        work_id=test_work.id,
+        status="pending",
+    )
+    db_session.add(task)
+    await db_session.commit()
+    await db_session.refresh(task)
+    return task
+
+
+@pytest.fixture(scope="function")
 async def auth_headers(client: AsyncClient, test_user: User) -> dict:
     """获取认证头"""
     response = await client.post(
-        "/api/v1/auth/login",
+        "/api/auth/login",
         data={
-            "username": "test@example.com",
+            "username": test_user.username,
             "password": "testpassword",
         },
     )
@@ -131,9 +174,9 @@ async def auth_headers(client: AsyncClient, test_user: User) -> dict:
 async def admin_auth_headers(client: AsyncClient, admin_user: User) -> dict:
     """获取管理员认证头"""
     response = await client.post(
-        "/api/v1/auth/login",
+        "/api/auth/login",
         data={
-            "username": "admin@example.com",
+            "username": admin_user.username,
             "password": "adminpassword",
         },
     )

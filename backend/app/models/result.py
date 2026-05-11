@@ -3,9 +3,9 @@ ScanIt 检测结果模型
 """
 import uuid
 from datetime import datetime
+from typing import Optional
 
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, Index, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import DateTime, Enum, Float, ForeignKey, Index, Integer, String, Text, JSON, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -26,24 +26,24 @@ class Result(Base):
     __tablename__ = "results"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        Uuid,
         primary_key=True,
         default=uuid.uuid4,
     )
     task_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        Uuid,
         ForeignKey("tasks.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     work_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        Uuid,
         ForeignKey("works.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        Uuid,
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -51,10 +51,10 @@ class Result(Base):
 
     # 来源信息
     source_url: Mapped[str] = mapped_column(String(2048), nullable=False)
-    source_title: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    source_snippet: Mapped[str | None] = mapped_column(Text, nullable=True)
-    source_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    source_snapshot_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)  # Wayback Machine
+    source_title: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    source_snippet: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source_domain: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    source_snapshot_url: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
 
     # 内容类型 (与 works.content_type 一致)
     content_type: Mapped[str] = mapped_column(
@@ -75,21 +75,23 @@ class Result(Base):
         index=True,
     )
 
-    # 详细比对数据
-    match_details: Mapped[dict | None] = mapped_column(
-        JSONB,
+    # 详细比对数据 (使用 JSON 存储)
+    match_details: Mapped[Optional[dict]] = mapped_column(
+        JSON,
         nullable=True,
     )  # 存储具体的匹配片段、区域等信息
-    matched_regions: Mapped[list[dict] | None] = mapped_column(
+    matched_regions: Mapped[Optional[list]] = mapped_column(
+        JSON,
         default=list,
     )  # 图片匹配区域坐标
-    matched_segments: Mapped[list[dict] | None] = mapped_column(
+    matched_segments: Mapped[Optional[list]] = mapped_column(
+        JSON,
         default=list,
     )  # 视频匹配时间段
 
     # 搜索引擎信息
     search_engine: Mapped[str] = mapped_column(String(50), nullable=False)
-    search_keyword: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    search_keyword: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     # 审核状态
     review_status: Mapped[str] = mapped_column(
@@ -97,13 +99,13 @@ class Result(Base):
         default="pending",
         index=True,
     )
-    review_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
+    review_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reviewed_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid,
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
-    reviewed_at: Mapped[datetime | None] = mapped_column(
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
@@ -114,7 +116,7 @@ class Result(Base):
         server_default=func.now(),
         nullable=False,
     )
-    updated_at: Mapped[datetime | None] = mapped_column(
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
         onupdate=func.now(),
         nullable=True,

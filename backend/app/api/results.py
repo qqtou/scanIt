@@ -22,6 +22,54 @@ from app.api.deps import get_current_active_user
 router = APIRouter(prefix="/results", tags=["Results"])
 
 
+@router.get("", response_model=ResultListResponse)
+async def list_results(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    risk_level: str | None = None,
+    review_status: str | None = None,
+    sort_by: str = Query("similarity_score", enum=["similarity_score", "created_at"]),
+    sort_order: str = Query("desc", enum=["asc", "desc"]),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    """获取所有检测结果"""
+    query = select(Result).where(Result.user_id == current_user.id)
+
+    if risk_level:
+        query = query.where(Result.risk_level == risk_level)
+    if review_status:
+        query = query.where(Result.review_status == review_status)
+
+    # 总数
+    count_query = select(func.count()).select_from(query.subquery())
+    total = (await db.execute(count_query)).scalar()
+
+    # 排序
+    if sort_by == "similarity_score":
+        order_col = Result.similarity_score
+    else:
+        order_col = Result.created_at
+    
+    if sort_order == "desc":
+        query = query.order_by(order_col.desc())
+    else:
+        query = query.order_by(order_col.asc())
+
+    # 分页
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(query)
+    items = result.scalars().all()
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size if total else 0,
+    }
+
+
 @router.get("/by-task/{task_id}", response_model=ResultListResponse)
 async def list_results_by_task(
     task_id: uuid.UUID,

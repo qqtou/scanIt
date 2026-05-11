@@ -3,10 +3,9 @@ ScanIt 检测任务模型
 """
 import uuid
 from datetime import datetime
-from typing import Literal
+from typing import Optional
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text, func
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+from sqlalchemy import DateTime, Enum, Float, ForeignKey, Index, Integer, String, Text, JSON, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -36,43 +35,43 @@ class Task(Base):
     __tablename__ = "tasks"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        Uuid,
         primary_key=True,
         default=uuid.uuid4,
     )
     work_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        Uuid,
         ForeignKey("works.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        Uuid,
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
     # 任务配置
-    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    keywords: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
-    search_engines: Mapped[list[str]] = mapped_column(
-        ARRAY(String),
+    title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    keywords: Mapped[Optional[list]] = mapped_column(JSON, default=list)  # 使用 JSON 存储
+    search_engines: Mapped[Optional[list]] = mapped_column(
+        JSON,
         default=["google"],
     )  # google, bing, baidu
-    content_types: Mapped[list[str]] = mapped_column(
-        ARRAY(String),
+    content_types: Mapped[Optional[list]] = mapped_column(
+        JSON,
         default=["text", "image", "video"],
     )  # text, image, video
 
     # 阈值配置 (覆盖全局配置)
-    text_threshold: Mapped[float | None] = mapped_column(default=None)
-    image_threshold: Mapped[float | None] = mapped_column(default=None)
-    video_threshold: Mapped[float | None] = mapped_column(default=None)
+    text_threshold: Mapped[Optional[float]] = mapped_column(Float, default=None)
+    image_threshold: Mapped[Optional[float]] = mapped_column(Float, default=None)
+    video_threshold: Mapped[Optional[float]] = mapped_column(Float, default=None)
 
     # 执行参数
-    max_results: Mapped[int] = mapped_column(default=50)
-    priority: Mapped[int] = mapped_column(default=TaskPriority.NORMAL)
+    max_results: Mapped[int] = mapped_column(Integer, default=50)
+    priority: Mapped[int] = mapped_column(Integer, default=TaskPriority.NORMAL)
 
     # 状态
     status: Mapped[str] = mapped_column(
@@ -87,28 +86,28 @@ class Task(Base):
         default="pending",
         index=True,
     )
-    progress: Mapped[int] = mapped_column(default=0)  # 0-100
-    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    progress: Mapped[int] = mapped_column(Integer, default=0)  # 0-100
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Celery 任务 ID (用于关联异步任务)
-    celery_task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    celery_task_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # 执行结果统计
-    total_results: Mapped[int] = mapped_column(default=0)
-    high_risk_count: Mapped[int] = mapped_column(default=0)
-    medium_risk_count: Mapped[int] = mapped_column(default=0)
-    low_risk_count: Mapped[int] = mapped_column(default=0)
+    total_results: Mapped[int] = mapped_column(Integer, default=0)
+    high_risk_count: Mapped[int] = mapped_column(Integer, default=0)
+    medium_risk_count: Mapped[int] = mapped_column(Integer, default=0)
+    low_risk_count: Mapped[int] = mapped_column(Integer, default=0)
 
     # 计划/执行时间
-    scheduled_at: Mapped[datetime | None] = mapped_column(
+    scheduled_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
-    started_at: Mapped[datetime | None] = mapped_column(
+    started_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
-    completed_at: Mapped[datetime | None] = mapped_column(
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
@@ -119,7 +118,7 @@ class Task(Base):
         server_default=func.now(),
         nullable=False,
     )
-    updated_at: Mapped[datetime | None] = mapped_column(
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
         onupdate=func.now(),
         nullable=True,

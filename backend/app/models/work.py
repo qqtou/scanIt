@@ -3,9 +3,9 @@ ScanIt 用户作品模型
 """
 import uuid
 from datetime import datetime
+from typing import Optional
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text, JSON, func, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -25,18 +25,18 @@ class Work(Base):
     __tablename__ = "works"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        Uuid,
         primary_key=True,
         default=uuid.uuid4,
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        Uuid,
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # 内容信息
     content_type: Mapped[str] = mapped_column(
@@ -45,14 +45,15 @@ class Work(Base):
         index=True,
     )
     content_url: Mapped[str] = mapped_column(String(1024), nullable=False)
-    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)  # SHA-256
-    content_size: Mapped[int | None] = mapped_column(default=None)  # bytes
-    mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)  # SHA-256
+    content_size: Mapped[Optional[int]] = mapped_column(default=None)  # bytes
+    mime_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
-    # 元数据
-    tags: Mapped[list[str] | None] = mapped_column(default=list)  # JSON array
-    metadata_: Mapped[dict | None] = mapped_column(
+    # 元数据 (使用 JSON 存储)
+    tags: Mapped[Optional[list]] = mapped_column(JSON, default=list)  # JSON array
+    metadata_: Mapped[Optional[dict]] = mapped_column(
         "metadata",
+        JSON,
         default=dict,
     )  # JSON object
 
@@ -69,7 +70,7 @@ class Work(Base):
         server_default=func.now(),
         nullable=False,
     )
-    updated_at: Mapped[datetime | None] = mapped_column(
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
         onupdate=func.now(),
         nullable=True,

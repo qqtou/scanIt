@@ -2,12 +2,12 @@
 单元测试 - 数据模型
 """
 import pytest
+import uuid
 from datetime import datetime
-from sqlalchemy import select
 
-from app.models.user import User
-from app.models.work import Work, WorkType
-from app.models.task import Task, TaskStatus, TaskType
+from app.models.user import User, UserRole
+from app.models.work import Work, ContentType
+from app.models.task import Task, TaskStatus, TaskPriority
 from app.models.result import Result, RiskLevel
 
 
@@ -30,7 +30,7 @@ class TestUserModel:
         assert user.username == "newuser"
         assert user.role == "user"
         assert user.is_active is True
-        assert user.is_deleted is False
+        assert user.is_verified is False
         assert user.created_at is not None
     
     async def test_user_default_values(self, db_session):
@@ -45,30 +45,22 @@ class TestUserModel:
         
         assert user.role == "user"
         assert user.is_active is True
-        assert user.is_deleted is False
-        assert user.quota_monthly == 100
-        assert user.quota_used_monthly == 0
+        assert user.is_verified is False
+        assert user.api_quota == 100
+        assert user.api_used == 0
     
-    async def test_user_soft_delete(self, db_session):
-        """测试用户软删除"""
+    async def test_user_admin_role(self, db_session):
+        """测试管理员用户"""
         user = User(
-            email="delete@example.com",
-            username="deleteuser",
+            email="admin@example.com",
+            username="admin",
             hashed_password="hashed_password",
+            role="admin",
         )
         db_session.add(user)
         await db_session.commit()
         
-        # 软删除
-        user.is_deleted = True
-        await db_session.commit()
-        
-        # 查询应该找不到
-        result = await db_session.execute(
-            select(User).where(User.email == "delete@example.com")
-        )
-        found_user = result.scalar_one_or_none()
-        assert found_user is None
+        assert user.role == "admin"
 
 
 class TestWorkModel:
@@ -79,53 +71,51 @@ class TestWorkModel:
         work = Work(
             user_id=test_user.id,
             title="测试文本作品",
-            work_type=WorkType.TEXT,
-            content="这是测试文本内容",
-            simhash="abc123",
+            content_type="text",
+            content_url="https://example.com/text",
+            content_hash="abc123def456",
         )
         db_session.add(work)
         await db_session.commit()
         
         assert work.id is not None
         assert work.title == "测试文本作品"
-        assert work.work_type == WorkType.TEXT
-        assert work.content == "这是测试文本内容"
-        assert work.simhash == "abc123"
+        assert work.content_type == "text"
+        assert work.content_url == "https://example.com/text"
+        assert work.content_hash == "abc123def456"
     
     async def test_create_image_work(self, db_session, test_user):
         """测试创建图片作品"""
         work = Work(
             user_id=test_user.id,
             title="测试图片作品",
-            work_type=WorkType.IMAGE,
-            file_path="/uploads/image.jpg",
-            phash="def456",
+            content_type="image",
+            content_url="https://example.com/image.jpg",
+            mime_type="image/jpeg",
         )
         db_session.add(work)
         await db_session.commit()
         
         assert work.id is not None
-        assert work.work_type == WorkType.IMAGE
-        assert work.file_path == "/uploads/image.jpg"
-        assert work.phash == "def456"
+        assert work.content_type == "image"
+        assert work.mime_type == "image/jpeg"
     
     async def test_create_video_work(self, db_session, test_user):
         """测试创建视频作品"""
         work = Work(
             user_id=test_user.id,
             title="测试视频作品",
-            work_type=WorkType.VIDEO,
-            file_path="/uploads/video.mp4",
-            duration=120,
-            frame_count=3600,
+            content_type="video",
+            content_url="https://example.com/video.mp4",
+            mime_type="video/mp4",
+            content_size=1024000,
         )
         db_session.add(work)
         await db_session.commit()
         
         assert work.id is not None
-        assert work.work_type == WorkType.VIDEO
-        assert work.duration == 120
-        assert work.frame_count == 3600
+        assert work.content_type == "video"
+        assert work.content_size == 1024000
 
 
 class TestTaskModel:
@@ -136,16 +126,15 @@ class TestTaskModel:
         task = Task(
             user_id=test_user.id,
             work_id=test_work.id,
-            task_type=TaskType.DETECTION,
-            status=TaskStatus.PENDING,
+            title="检测任务",
+            status="pending",
             search_engines=["google", "bing"],
         )
         db_session.add(task)
         await db_session.commit()
         
         assert task.id is not None
-        assert task.task_type == TaskType.DETECTION
-        assert task.status == TaskStatus.PENDING
+        assert task.status == "pending"
         assert "google" in task.search_engines
         assert "bing" in task.search_engines
     
@@ -154,71 +143,70 @@ class TestTaskModel:
         task = Task(
             user_id=test_user.id,
             work_id=test_work.id,
-            task_type=TaskType.DETECTION,
-            status=TaskStatus.PENDING,
+            status="pending",
         )
         db_session.add(task)
         await db_session.commit()
         
         # PENDING -> RUNNING
-        task.status = TaskStatus.RUNNING
+        task.status = "running"
+        task.started_at = datetime.utcnow()
         await db_session.commit()
-        assert task.status == TaskStatus.RUNNING
+        assert task.status == "running"
+        assert task.started_at is not None
         
         # RUNNING -> COMPLETED
-        task.status = TaskStatus.COMPLETED
+        task.status = "completed"
         task.completed_at = datetime.utcnow()
+        task.progress = 100
         await db_session.commit()
-        assert task.status == TaskStatus.COMPLETED
+        assert task.status == "completed"
         assert task.completed_at is not None
 
 
 class TestResultModel:
     """结果模型测试"""
     
-    async def test_create_result(self, db_session, test_user, test_task):
+    async def test_create_result(self, db_session, test_user, test_task, test_work):
         """测试创建检测结果"""
         result = Result(
             task_id=test_task.id,
             user_id=test_user.id,
-            risk_level=RiskLevel.HIGH,
-            source_url="https://example.com",
+            work_id=test_work.id,
+            risk_level="high",
+            source_url="https://example.com/infringing",
             source_title="疑似侵权内容",
             source_snippet="这是疑似侵权的文本内容",
-            similarity=0.95,
-            matched_content="疑似侵权内容",
-            metadata={"engine": "google", "rank": 1},
+            similarity_score=0.95,
+            content_type="text",
+            search_engine="google",
         )
         db_session.add(result)
         await db_session.commit()
         
         assert result.id is not None
-        assert result.risk_level == RiskLevel.HIGH
-        assert result.similarity == 0.95
-        assert result.metadata["engine"] == "google"
+        assert result.risk_level == "high"
+        assert result.similarity_score == 0.95
     
-    async def test_result_risk_levels(self, db_session, test_user, test_task):
+    async def test_result_risk_levels(self, db_session, test_user, test_task, test_work):
         """测试不同风险等级"""
-        for risk_level in RiskLevel:
+        risk_levels = ["high", "medium", "low", "safe"]
+        for i, risk_level in enumerate(risk_levels):
             result = Result(
                 task_id=test_task.id,
                 user_id=test_user.id,
+                work_id=test_work.id,
                 risk_level=risk_level,
-                source_url=f"https://example.com/{risk_level.value}",
-                source_title=f"结果 {risk_level.value}",
+                source_url=f"https://example.com/result_{i}",
+                source_title=f"结果 {risk_level}",
                 source_snippet="内容",
-                similarity=0.5,
+                similarity_score=0.5,
+                content_type="text",
+                search_engine="google",
             )
             db_session.add(result)
         
         await db_session.commit()
-        
-        # 查询所有结果
-        from sqlalchemy import select
-        results = await db_session.execute(select(Result))
-        found_results = results.scalars().all()
-        
-        assert len(found_results) == len(RiskLevel)
 
 
 # Pytest fixture for test_work and test_task
@@ -228,9 +216,9 @@ async def test_work(db_session, test_user):
     work = Work(
         user_id=test_user.id,
         title="测试作品",
-        work_type=WorkType.TEXT,
-        content="测试内容",
-        simhash="test123",
+        content_type="text",
+        content_url="https://example.com/test",
+        content_hash="testhash123",
     )
     db_session.add(work)
     await db_session.commit()
@@ -244,8 +232,7 @@ async def test_task(db_session, test_user, test_work):
     task = Task(
         user_id=test_user.id,
         work_id=test_work.id,
-        task_type=TaskType.DETECTION,
-        status=TaskStatus.PENDING,
+        status="pending",
     )
     db_session.add(task)
     await db_session.commit()

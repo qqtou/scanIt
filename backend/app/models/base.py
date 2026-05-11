@@ -1,11 +1,12 @@
 """
 ScanIt 数据库配置和基础类
 """
+import os
 from datetime import datetime
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 from sqlalchemy import MetaData
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine, AsyncEngine
 from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
@@ -30,27 +31,74 @@ class Base(DeclarativeBase):
     updated_at: datetime | None = None
 
 
-# 创建异步引擎
-engine = create_async_engine(
-    settings.database_url,
-    echo=settings.debug,
-    pool_size=settings.database_pool_size,
-    pool_pre_ping=True,
-)
+# 测试模式检测
+TESTING = os.getenv("TESTING", "false").lower() == "true"
 
-# 异步会话工厂
-async_session_maker = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-    autocommit=False,
-    autoflush=False,
-)
+# 懒加载引擎
+_engine: Optional[AsyncEngine] = None
+
+
+def get_engine() -> AsyncEngine:
+    """获取数据库引擎 (懒加载)"""
+    global _engine
+    if _engine is None:
+        # 测试模式使用 SQLite
+        if TESTING:
+            url = "sqlite+aiosqlite:///:memory:"
+        else:
+            url = settings.database_url
+        
+        _engine = create_async_engine(
+            url,
+            echo=settings.debug,
+            pool_size=settings.database_pool_size if not TESTING else None,
+            pool_pre_ping=True,
+        )
+    return _engine
+
+
+def get_session_maker() -> async_sessionmaker[AsyncSession]:
+    """获取会话工厂"""
+    return async_sessionmaker(
+        get_engine(),
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False,
+    )
+
+
+# 为了向后兼容，提供属性访问
+class _EngineProxy:
+    """引擎代理，支持懒加载"""
+    def __call__(self):
+        return get_engine()
+    
+    def __getattr__(self, name):
+        return getattr(get_engine(), name)
+    
+    def __repr__(self):
+        return f"<Engine proxy for {get_engine()}>"
+
+
+class _SessionMakerProxy:
+    """会话工厂代理，支持懒加载"""
+    def __call__(self):
+        return get_session_maker()
+    
+    def __getattr__(self, name):
+        return getattr(get_session_maker(), name)
+
+
+# 兼容旧代码的导出
+engine = _EngineProxy()
+async_session_maker = _SessionMakerProxy()
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """依赖注入：获取数据库会话"""
-    async with async_session_maker() as session:
+    session_maker = get_session_maker()
+    async with session_maker() as session:
         try:
             yield session
             await session.commit()
