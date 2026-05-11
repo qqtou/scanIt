@@ -6,6 +6,7 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-green.svg)
 ![React](https://img.shields.io/badge/React-18.3-blue.svg)
 ![Docker](https://img.shields.io/badge/Docker-24.0+-blue.svg)
+![CI](https://github.com/your-org/scanit/actions/workflows/ci.yml/badge.svg)
 ![Tests](https://img.shields.io/badge/Tests-78%20passed-brightgreen.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
@@ -345,6 +346,34 @@ ANTHROPIC_API_KEY=your_anthropic_key
 - 实时切换 Tier（local / budget / enterprise）
 - 查看各 Provider 的连接状态
 - 查看 AI 调用费用汇总
+
+##  Demo 演示
+
+运行以下命令快速体验不同 Tier 的效果对比：
+
+```bash
+cd backend
+
+# Tier 1 (本地，需先安装 Ollama + 模型)
+python demo_tiers.py
+
+# Tier 2 (低成本云)
+$env:AI_TIER="budget"
+$env:ZHIPU_API_KEY="your_key"
+python demo_tiers.py
+
+# Tier 3 (企业级)
+$env:AI_TIER="enterprise"
+$env:OPENAI_API_KEY="your_key"
+python demo_tiers.py
+```
+
+演示内容：
+- Provider 状态检测
+- 关键词生成对比（LLM vs 规则提取）
+- 图片侵权深度分析
+- LLM 侵权报告生成
+- Embedding 语义相似度计算
 
 ##  运行测试
 
