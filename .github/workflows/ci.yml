@@ -7,12 +7,16 @@ on:
     branches: [main, dev]
 
 jobs:
-  # ==================== Backend Tests ====================
+  # ==================== Backend Tests (Python 3.11 & 3.12) ====================
   backend-test:
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: backend
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
 
     services:
       postgres:
@@ -42,24 +46,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
 
       - name: Cache pip packages
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+          key: ${{ runner.os }}-py${{ matrix.python-version }}-pip-${{ hashFiles('backend/requirements.txt') }}
           restore-keys: |
-            ${{ runner.os }}-pip-
+            ${{ runner.os }}-py${{ matrix.python-version }}-pip-
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-cov pytest-asyncio
+          pip install pytest pytest-cov pytest-asyncio httpx
 
       - name: Run linting
         run: |
@@ -68,20 +72,92 @@ jobs:
           black --check .
           mypy app/
 
-      - name: Run tests
+      - name: Run tests (no LLM)
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/scanit_test
           REDIS_URL: redis://localhost:6379/0
           QDRANT_URL: http://localhost:6333
         run: |
-          pytest --cov=app --cov-report=xml --cov-report=html
+          pytest --cov=app --cov-report=xml --cov-report=html tests/ -v --ignore=tests/test_llm_provider.py
 
       - name: Upload coverage
+        if: matrix.python-version == '3.11'
         uses: codecov/codecov-action@v4
         with:
           file: backend/coverage.xml
           flags: backend
-          name: backend
+          name: backend-${{ matrix.python-version }}
+
+  # ==================== Backend LLM Integration Tests ====================
+  backend-llm-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: scanit_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+
+      ollama:
+        image: ollama/ollama:latest
+        ports:
+          - 11434:11434
+        options: >-
+          --health-cmd "curl -f http://localhost:11434/api/tags"
+          --health-interval 30s
+          --health-timeout 10s
+          --health-retries 5
+        # 预拉取测试用的模型（可选，模型已在镜像中）
+        # volumes:
+        #   - ollama_data:/root/.ollama
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Pull Ollama models (optional, for Tier1)
+        run: |
+          curl -s http://localhost:11434/api/tags || echo "Ollama not ready yet"
+          # 注释掉自动拉取：CI 环境模型由镜像预装
+          # curl -X POST http://localhost:11434/api/pull -d '{"name":"llama3.2"}'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-asyncio httpx
+
+      - name: Run LLM provider tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/scanit_test
+          REDIS_URL: redis://localhost:6379/0
+          QDRANT_URL: http://localhost:6333
+          OLLAMA_BASE_URL: http://localhost:11434
+          OLLAMA_MODEL: llama3.2
+          AI_TIER: local
+        run: |
+          pytest tests/test_llm_provider.py -v
 
   # ==================== Frontend Tests ====================
   frontend-test:
@@ -93,7 +169,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Set up Node.js 18
         uses: actions/setup-node@v4
         with:
           node-version: '18'
@@ -128,19 +204,39 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Container Registry
+      # GitHub Container Registry
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Docker Hub (optional, only if secrets configured)
+      - name: Login to Docker Hub
+        if: secrets.DOCKERHUB_USERNAME != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata (backend)
+        uses: docker/metadata-action@v5
+        id: meta-backend
+        with:
+          images: ghcr.io/${{ github.repository }}/backend
+          tags: |
+            type=sha,format=long
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+
       - name: Build and push backend
         uses: docker/build-push-action@v5
         with:
           context: ./backend
           push: true
-          tags: ghcr.io/${{ github.repository }}/backend:latest
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -149,6 +245,38 @@ jobs:
         with:
           context: ./frontend
           push: true
+          tags: ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}
           tags: ghcr.io/${{ github.repository }}/frontend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Docker Hub push (when credentials available)
+      - name: Push to Docker Hub (backend)
+        if: secrets.DOCKERHUB_USERNAME != ''
+        env:
+          DH_REPO: ${{ secrets.DOCKERHUB_USERNAME }}/scanit-backend
+        run: |
+          docker tag ghcr.io/${{ github.repository }}/backend:latest $DH_REPO:latest
+          docker tag ghcr.io/${{ github.repository }}/backend:latest $DH_REPO:${{ github.sha }}
+          docker push -a $DH_REPO
+
+  # ==================== Full Stack Integration Test ====================
+  fullstack-test:
+    runs-on: ubuntu-latest
+    needs: [docker-build]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start full stack
+        run: |
+          docker compose -f docker-compose.yml up -d postgres redis
+          docker compose -f docker-compose.yml run --rm backend \
+            sh -c "alembic upgrade head && pytest tests/ -v"
+
+      - name: Smoke test API
+        run: |
+          docker compose -f docker-compose.yml up -d backend
+          sleep 10
+          curl -sf http://localhost:8000/health || exit 1
