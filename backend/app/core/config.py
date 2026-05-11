@@ -46,6 +46,17 @@ class Settings(BaseSettings):
     max_concurrent_tasks: int = 5
     task_timeout_seconds: int = 3600
 
+    # Email (SMTP)
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "noreply@scanit.com"
+    smtp_tls: bool = True
+
+    # Webhook
+    webhook_timeout: int = 10
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
