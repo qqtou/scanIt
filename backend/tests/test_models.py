@@ -3,7 +3,7 @@
 """
 import pytest
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.models.user import User, UserRole
 from app.models.work import Work, ContentType
@@ -150,14 +150,14 @@ class TestTaskModel:
         
         # PENDING -> RUNNING
         task.status = "running"
-        task.started_at = datetime.utcnow()
+        task.started_at = datetime.now(timezone.utc)
         await db_session.commit()
         assert task.status == "running"
         assert task.started_at is not None
         
         # RUNNING -> COMPLETED
         task.status = "completed"
-        task.completed_at = datetime.utcnow()
+        task.completed_at = datetime.now(timezone.utc)
         task.progress = 100
         await db_session.commit()
         assert task.status == "completed"

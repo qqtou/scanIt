@@ -1,11 +1,13 @@
 """
 ScanIt 全局配置
 """
+from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 from typing import List
 
 
 class Settings(BaseSettings):
+    model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8")
     # App
     app_name: str = "ScanIt"
     debug: bool = True
@@ -57,9 +59,7 @@ class Settings(BaseSettings):
     # Webhook
     webhook_timeout: int = 10
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+
 
 
 settings = Settings()
