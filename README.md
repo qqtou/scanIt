@@ -6,6 +6,8 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-green.svg)
 ![React](https://img.shields.io/badge/React-18.3-blue.svg)
 ![Docker](https://img.shields.io/badge/Docker-24.0+-blue.svg)
+![Tests](https://img.shields.io/badge/Tests-36%20passed-brightgreen.svg)
+![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 ## 🎯 功能特性
 
@@ -160,15 +162,15 @@ docker-compose exec backend alembic upgrade head
 
 | 模块 | 端点 | 说明 |
 |------|------|------|
-| 认证 | POST /api/v1/auth/login | 用户登录 |
-| 认证 | POST /api/v1/auth/register | 用户注册 |
-| 作品 | GET/POST /api/v1/works | 作品列表/创建 |
-| 作品 | GET/PUT/DELETE /api/v1/works/{id} | 作品详情/更新/删除 |
-| 任务 | GET/POST /api/v1/tasks | 任务列表/创建 |
-| 任务 | GET/PUT /api/v1/tasks/{id} | 任务详情/更新 |
-| 结果 | GET /api/v1/results | 检测结果列表 |
-| 结果 | PUT /api/v1/results/{id}/review | 结果审核 |
-| 统计 | GET /api/v1/dashboard/stats | 统计数据 |
+| 认证 | POST /api/auth/login | 用户登录 |
+| 认证 | POST /api/auth/register | 用户注册 |
+| 作品 | GET/POST /api/works | 作品列表/创建 |
+| 作品 | GET/PUT/DELETE /api/works/{id} | 作品详情/更新/删除 |
+| 任务 | GET/POST /api/tasks | 任务列表/创建 |
+| 任务 | GET/PUT /api/tasks/{id} | 任务详情/更新 |
+| 结果 | GET /api/results | 检测结果列表 |
+| 结果 | PUT /api/results/{id}/review | 结果审核 |
+| 统计 | GET /api/dashboard/stats | 统计数据 |
 
 ## 🧪 运行测试
 
