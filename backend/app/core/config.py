@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
 
+    # JWT Authentication
+    jwt_secret_key: str = "your-secret-key-change-in-production"  # 请在生产环境替换
+    jwt_algorithm: str = "HS256"
+    jwt_expiration_hours: int = 24
+
     # API Keys (请替换为真实密钥)
     google_api_key: str = ""
     google_search_engine_id: str = ""
