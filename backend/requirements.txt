@@ -50,6 +50,9 @@ python-dateutil==2.9.0
 python-dotenv==1.0.1
 aiofiles==24.1.0
 
+# Rate Limiting
+slowapi==0.1.9
+
 # Monitoring
 sentry-sdk[fastapi]==2.18.0
 

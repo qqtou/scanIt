@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8")
     # App
     app_name: str = "ScanIt"
-    debug: bool = True
+    debug: bool = False  # 生产环境默认关闭
     cors_origins: List[str] = ["http://localhost:3000", "http://localhost:5173"]
 
     # Database
