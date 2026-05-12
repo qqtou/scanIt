@@ -41,14 +41,14 @@ M7 [░░░░░░░░░░]   0% 🔄 生产优化
 | S2.3 | E2E 测试 | 🟡 中 | ⬜ | Playwright 关键流程 |
 | S2.4 | pre-commit hooks | 🟡 中 | ✅ | black, isort, mypy, eslint 已配置 |
 
-### Phase 3: CI/CD 完善（中优先级）
+### Phase 3: CI/CD 完善 ✅ 已完成（3/4）
 
 | ID | 任务 | 优先级 | 状态 | 说明 |
 |----|------|--------|------|------|
-| S3.1 | GitHub Actions 测试 | 🟡 中 | ⬜ | PR 自动运行测试 |
-| S3.2 | Docker 镜像构建 | 🟡 中 | ⬜ | 推送到 GitHub Registry |
+| S3.1 | GitHub Actions 测试 | 🟡 中 | ✅ | ci.yml 已配置，4 jobs |
+| S3.2 | Docker 镜像构建 | 🟡 中 | ✅ | ci.yml 推送到 ghcr.io |
 | S3.3 | 自动部署 | 🟡 中 | ⬜ | main 分支自动部署 |
-| S3.4 | 依赖安全扫描 | 🟡 中 | ⬜ | Dependabot 或 Snyk |
+| S3.4 | 依赖安全扫描 | 🟡 中 | ✅ | Dependabot 已配置 |
 
 ### Phase 4: 监控告警（中优先级）
 
@@ -72,11 +72,11 @@ M7 [░░░░░░░░░░]   0% 🔄 生产优化
 
 ## 📌 当前焦点
 
-**M7 Phase 3: CI/CD 完善** — 从 S3.1 开始
+**M7 Phase 4: 监控告警** — 从 S4.1 开始
 
 下一步任务：
-1. **S3.1** — GitHub Actions 测试
-2. **S3.2** — Docker 镜像构建
+1. **S4.1** — Prometheus 指标
+2. **S4.2** — Grafana 仪表盘
 
 ---
 
@@ -90,6 +90,7 @@ M7 [░░░░░░░░░░]   0% 🔄 生产优化
 | GitHub 推送 | 2026-05-12 | https://github.com/qqtou/scanIt ✅ |
 | M7 Phase 1 | 2026-05-12 | 安全加固 5/5 ✅ |
 | M7 Phase 2 | 2026-05-12 | 测试完善 3/4 ✅ |
+| M7 Phase 3 | 2026-05-12 | CI/CD 3/4 ✅ |
 
 ---
 
@@ -101,4 +102,4 @@ M7 [░░░░░░░░░░]   0% 🔄 生产优化
 | 2026-05-12 | M6 多租户改造 ✅ |
 | 2026-05-12 | 搜索引擎分层方案 ✅ |
 | 2026-05-12 | GitHub 推送 ✅ |
-| 2026-05-12 | M7 Phase 2 测试完善 ✅ |
+| 2026-05-12 | M7 Phase 3 CI/CD ✅ |
