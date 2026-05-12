@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Task, User, Work
+from app.models import Task, Tenant, User, Work
 from app.models.base import get_db
 from app.schemas.task import (
     TaskCreate,
@@ -18,6 +18,7 @@ from app.schemas.task import (
     TaskUpdate,
 )
 from app.api.deps import get_current_active_user
+from app.api.middleware import check_tenant_quota
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
@@ -27,6 +28,7 @@ async def create_task(
     task_data: TaskCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
+    _tenant: Tenant = Depends(check_tenant_quota),
 ) -> Task:
     """创建检测任务"""
     # 验证作品存在且属于当前用户
@@ -46,6 +48,7 @@ async def create_task(
     # 创建任务
     task = Task(
         user_id=current_user.id,
+        tenant_id=current_user.tenant_id,
         work_id=task_data.work_id,
         title=task_data.title or f"Scan Task for {work.title}",
         keywords=task_data.keywords,
@@ -71,6 +74,9 @@ async def list_tasks(
 ) -> dict:
     """获取任务列表"""
     query = select(Task).where(Task.user_id == current_user.id)
+    # 租户隔离
+    if current_user.tenant_id:
+        query = query.where(Task.tenant_id == current_user.tenant_id)
 
     if status:
         query = query.where(Task.status == status)
@@ -115,6 +121,11 @@ async def get_task(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found",
         )
+    if current_user.tenant_id and task.tenant_id != current_user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found",
+        )
     return task
 
 
@@ -133,6 +144,11 @@ async def get_task_status(
     )
     task = result.scalar_one_or_none()
     if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found",
+        )
+    if current_user.tenant_id and task.tenant_id != current_user.tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found",
@@ -174,6 +190,11 @@ async def update_task(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found",
         )
+    if current_user.tenant_id and task.tenant_id != current_user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found",
+        )
 
     # 只能更新 pending 状态的任务
     if task.status != "pending":
@@ -208,6 +229,11 @@ async def delete_task(
     )
     task = result.scalar_one_or_none()
     if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found",
+        )
+    if current_user.tenant_id and task.tenant_id != current_user.tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found",

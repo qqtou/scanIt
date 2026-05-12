@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models import User
+from app.models import User, Tenant
 from app.models.base import get_db
 from app.schemas.auth import LoginRequest, RegisterRequest, Token
 from app.schemas.user import UserInDB
@@ -46,7 +46,12 @@ async def register(
     user_data: RegisterRequest,
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    """用户注册"""
+    """用户注册
+
+    支持邀请码注册：
+    - 有 invite_code → 验证码对应租户，用户直接加入
+    - 无 invite_code → 分配默认租户（如果存在）
+    """
     # 检查邮箱是否存在
     result = await db.execute(select(User).where(User.email == user_data.email))
     if result.scalar_one_or_none():
@@ -65,12 +70,34 @@ async def register(
             detail="Username already taken",
         )
 
+    # 确定租户
+    tenant_id = None
+    role = "user"
+    if user_data.invite_code:
+        # TODO: 实现邀请码逻辑，暂时用 invite_code == tenant.slug 查找
+        result = await db.execute(
+            select(Tenant).where(Tenant.slug == user_data.invite_code, Tenant.is_active == True)
+        )
+        tenant = result.scalar_one_or_none()
+        if tenant:
+            tenant_id = tenant.id
+    if tenant_id is None:
+        # 无邀请码或码无效 → 分配默认租户
+        result = await db.execute(
+            select(Tenant).where(Tenant.slug == "default", Tenant.is_active == True)
+        )
+        default_tenant = result.scalar_one_or_none()
+        if default_tenant:
+            tenant_id = default_tenant.id
+
     # 创建用户
     user = User(
         email=user_data.email,
         username=user_data.username,
         full_name=user_data.full_name,
         hashed_password=get_password_hash(user_data.password),
+        tenant_id=tenant_id,
+        role=role,
     )
     db.add(user)
     await db.commit()
@@ -106,9 +133,18 @@ async def login(
     user.last_login_at = datetime.now(timezone.utc)
     await db.commit()
 
-    # 创建访问令牌
-    access_token = create_access_token(data={"sub": str(user.id)})
-    return {"access_token": access_token, "token_type": "bearer"}
+    # 创建访问令牌（包含 tenant_id 和 role）
+    access_token = create_access_token(data={
+        "sub": str(user.id),
+        "tenant_id": str(user.tenant_id) if user.tenant_id else None,
+        "role": user.role,
+    })
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "tenant_id": str(user.tenant_id) if user.tenant_id else None,
+        "role": user.role,
+    }
 
 
 @router.get("/me", response_model=UserInDB)

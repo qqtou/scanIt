@@ -5,18 +5,19 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Enum, String, Uuid, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
 
 class UserRole(str):
-    """用户角色"""
+    """用户角色（多租户）"""
 
-    ADMIN = "admin"
-    USER = "user"
-    REVIEWER = "reviewer"
+    SYSTEM_ADMIN = "system_admin"    # 平台管理
+    TENANT_ADMIN = "tenant_admin"  # 租户管理
+    REVIEWER = "reviewer"          # 结果审核
+    USER = "user"                  # 基础功能
 
 
 class User(Base):
@@ -48,9 +49,24 @@ class User(Base):
     avatar_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
 
-    # 角色和权限
+    # 租户
+    tenant_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid,
+        ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="所属租户，system_admin 无需绑定",
+    )
+
+    # 角色和权限（多租户角色）
     role: Mapped[str] = mapped_column(
-        Enum("admin", "user", "reviewer", name="user_role_enum"),
+        Enum(
+            "system_admin",
+            "tenant_admin",
+            "reviewer",
+            "user",
+            name="user_role_enum",
+        ),
         default="user",
         index=True,
     )
@@ -78,6 +94,7 @@ class User(Base):
     )
 
     # 关系
+    tenant = relationship("Tenant", back_populates="users")
     works = relationship("Work", back_populates="user", cascade="all, delete-orphan")
     tasks = relationship("Task", back_populates="user", cascade="all, delete-orphan")
 

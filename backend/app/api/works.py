@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import User, Work
+from app.models import Tenant, User, Work
 from app.models.base import get_db
 from app.schemas.work import (
     WorkCreate,
@@ -16,7 +16,7 @@ from app.schemas.work import (
     WorkListResponse,
     WorkUpdate,
 )
-from app.api.deps import get_current_active_user
+from app.api.deps import get_current_active_user, get_current_tenant
 
 router = APIRouter(prefix="/works", tags=["Works"])
 
@@ -26,10 +26,12 @@ async def create_work(
     work_data: WorkCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
+    tenant: Tenant = Depends(get_current_tenant),
 ) -> Work:
     """创建作品"""
     work = Work(
         user_id=current_user.id,
+        tenant_id=current_user.tenant_id,
         title=work_data.title,
         description=work_data.description,
         content_type=work_data.content_type,
@@ -53,6 +55,9 @@ async def list_works(
 ) -> dict:
     """获取作品列表"""
     query = select(Work).where(Work.user_id == current_user.id)
+    # 租户隔离：非 system_admin 只看本租户数据
+    if current_user.tenant_id:
+        query = query.where(Work.tenant_id == current_user.tenant_id)
 
     if content_type:
         query = query.where(Work.content_type == content_type)
@@ -97,6 +102,12 @@ async def get_work(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Work not found",
         )
+    # 租户隔离校验
+    if current_user.tenant_id and work.tenant_id != current_user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Work not found",
+        )
     return work
 
 
@@ -116,6 +127,11 @@ async def update_work(
     )
     work = result.scalar_one_or_none()
     if not work:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Work not found",
+        )
+    if current_user.tenant_id and work.tenant_id != current_user.tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Work not found",
@@ -147,6 +163,11 @@ async def delete_work(
     )
     work = result.scalar_one_or_none()
     if not work:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Work not found",
+        )
+    if current_user.tenant_id and work.tenant_id != current_user.tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Work not found",

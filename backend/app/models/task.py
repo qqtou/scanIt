@@ -52,7 +52,12 @@ class Task(Base):
         index=True,
     )
 
-    # 任务配置
+    # 租户 ID（多租户隔离）
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     keywords: Mapped[Optional[list]] = mapped_column(JSON, default=list)  # 使用 JSON 存储
     search_engines: Mapped[Optional[list]] = mapped_column(
@@ -137,6 +142,7 @@ class Task(Base):
         Index("ix_tasks_user_status", "user_id", "status"),
         Index("ix_tasks_work_status", "work_id", "status"),
         Index("ix_tasks_created_at", "created_at"),
+        Index("ix_tasks_tenant_id", "tenant_id"),
     )
 
     def __repr__(self) -> str:

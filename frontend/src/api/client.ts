@@ -410,3 +410,94 @@ export interface DashboardStats {
 export const dashboardApi = {
   getStats: () => request<DashboardStats>("/dashboard/stats"),
 };
+
+// ============ 租户相关（Admin） ============
+
+export interface Tenant {
+  id: string;
+  name: string;
+  slug: string;
+  plan: "basic" | "pro" | "enterprise";
+  quota_monthly: number;
+  quota_used: number;
+  quota_period_start: string;
+  is_active: boolean;
+  settings: Record<string, unknown>;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  created_at: string;
+}
+
+export interface TenantCreate {
+  name: string;
+  slug: string;
+  plan?: "basic" | "pro" | "enterprise";
+  quota_monthly?: number;
+  contact_name?: string;
+  contact_email?: string;
+  contact_phone?: string;
+}
+
+export interface TenantUpdate {
+  name?: string;
+  plan?: "basic" | "pro" | "enterprise";
+  quota_monthly?: number;
+  is_active?: boolean;
+  contact_name?: string;
+  contact_email?: string;
+  contact_phone?: string;
+}
+
+export interface TenantUser {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+  is_active: boolean;
+}
+
+export const tenantsApi = {
+  // System Admin: 租户 CRUD
+  list: (params?: { skip?: number; limit?: number; is_active?: boolean }) => {
+    const sp = new URLSearchParams();
+    if (params?.skip) sp.set("skip", String(params.skip));
+    if (params?.limit) sp.set("limit", String(params.limit));
+    if (params?.is_active !== undefined) sp.set("is_active", String(params.is_active));
+    return request<Tenant[]>(`/system/tenants?${sp}`);
+  },
+
+  get: (id: string) => request<Tenant>(`/system/tenants/${id}`),
+
+  create: (data: TenantCreate) =>
+    request<Tenant>("/system/tenants", { method: "POST", body: JSON.stringify(data) }),
+
+  update: (id: string, data: TenantUpdate) =>
+    request<Tenant>(`/system/tenants/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  delete: (id: string) =>
+    request<void>(`/system/tenants/${id}`, { method: "DELETE" }),
+
+  // Tenant Admin: 配额 & 设置
+  getQuota: () => request<{ tenant_id: string; quota_monthly: number; quota_used: number; quota_period_start: string }>("/admin/quota"),
+
+  getSettings: () => request<{ tenant_id: string; settings: Record<string, unknown> }>("/admin/settings"),
+
+  updateSettings: (data: Record<string, unknown>) =>
+    request<{ tenant_id: string; settings: Record<string, unknown> }>("/admin/settings", { method: "PUT", body: JSON.stringify(data) }),
+
+  // Tenant Admin: 用户管理
+  listUsers: (params?: { skip?: number; limit?: number; role?: string }) => {
+    const sp = new URLSearchParams();
+    if (params?.skip) sp.set("skip", String(params.skip));
+    if (params?.limit) sp.set("limit", String(params.limit));
+    if (params?.role) sp.set("role", params.role);
+    return request<TenantUser[]>(`/admin/users?${sp}`);
+  },
+
+  createUser: (data: { email: string; username: string; password: string; role?: string; full_name?: string }) =>
+    request<TenantUser>("/admin/users", { method: "POST", body: JSON.stringify(data) }),
+
+  updateUser: (id: string, data: { role?: string; is_active?: boolean }) =>
+    request<TenantUser>(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+};

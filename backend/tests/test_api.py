@@ -171,24 +171,4 @@ class TestResultsAPI:
         assert "total" in data
 
 
-# Fixtures for API tests
-@pytest.fixture
-async def test_result(db_session, test_user, test_task, test_work):
-    """创建测试结果"""
-    from app.models.result import Result, RiskLevel
-    result = Result(
-        task_id=test_task.id,
-        work_id=test_work.id,
-        user_id=test_user.id,
-        risk_level=RiskLevel.HIGH,
-        source_url="https://example.com",
-        source_title="疑似侵权",
-        source_snippet="内容",
-        similarity_score=0.85,
-        content_type="text",
-        search_engine="google",
-    )
-    db_session.add(result)
-    await db_session.commit()
-    await db_session.refresh(result)
-    return result
+# Fixtures for API tests - test_result now provided by conftest.py

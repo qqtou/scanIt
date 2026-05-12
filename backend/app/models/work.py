@@ -35,6 +35,12 @@ class Work(Base):
         nullable=False,
         index=True,
     )
+    # 租户 ID（多租户隔离）
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
@@ -83,6 +89,7 @@ class Work(Base):
     __table_args__ = (
         Index("ix_works_user_content_type", "user_id", "content_type"),
         Index("ix_works_user_status", "user_id", "status"),
+        Index("ix_works_tenant_id", "tenant_id"),
     )
 
     def __repr__(self) -> str:

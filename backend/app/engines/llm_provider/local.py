@@ -10,7 +10,9 @@ Ollama 本地推理 Provider
 """
 
 import base64
+import json
 import logging
+import time
 from io import BytesIO
 from typing import Any
 
@@ -61,18 +63,25 @@ class OllamaProvider(BaseProvider):
     async def initialize(self) -> bool:
         """检测 Ollama 服务是否可用"""
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            start = time.monotonic()
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(f"{self.base_url}/api/tags")
+                elapsed = time.monotonic() - start
                 if response.status_code == 200:
                     models = response.json().get("models", [])
                     model_names = [m["name"] for m in models]
                     logger.info(
-                        f"[Ollama] Connected. Available models: {model_names}"
+                        f"[Ollama] Init OK | available_models={model_names} "
+                        f"elapsed={elapsed:.2f}s"
                     )
-                    # 记录实际可用的模型
                     self._available_models = model_names
                     self._initialized = True
                     return True
+                else:
+                    logger.warning(
+                        f"[Ollama] Init failed | status={response.status_code} "
+                        f"elapsed={elapsed:.2f}s"
+                    )
         except httpx.ConnectError:
             logger.debug(f"[Ollama] Not running at {self.base_url}")
         except Exception as e:
@@ -119,6 +128,7 @@ class OllamaProvider(BaseProvider):
         model_name = model or self._text_model
         max_tokens = max_tokens or self.config.max_tokens
 
+        start = time.monotonic()
         response = await self.client.post(
             "/api/chat",
             json={
@@ -131,8 +141,16 @@ class OllamaProvider(BaseProvider):
                 },
             },
         )
+        elapsed = time.monotonic() - start
         result = response.json()
-        return result["message"]["content"]
+        content = result["message"]["content"]
+
+        logger.info(
+            f"[Ollama] generate_text | model={model_name} "
+            f"prompt_len={len(prompt)} content_len={len(content)} "
+            f"elapsed={elapsed:.2f}s"
+        )
+        return content
 
     async def generate_text_stream(
         self,
@@ -159,9 +177,6 @@ class OllamaProvider(BaseProvider):
         ) as response:
             async for line in response.aiter_lines():
                 if line.strip():
-                    data = response.__class__.model_validate_json(line) if hasattr(response.__class__, 'model_validate_json') else None
-                    # 简单解析
-                    import json
                     try:
                         data = json.loads(line)
                         if "message" in data and "content" in data["message"]:
@@ -201,6 +216,7 @@ class OllamaProvider(BaseProvider):
             }
         ]
 
+        start = time.monotonic()
         response = await self.client.post(
             "/api/chat",
             json={
@@ -209,20 +225,23 @@ class OllamaProvider(BaseProvider):
                 "stream": False,
             },
         )
+        elapsed = time.monotonic() - start
         result = response.json()
         content = result["message"]["content"]
 
+        logger.info(
+            f"[Ollama] understand_image | model={model_name} "
+            f"prompt_len={len(prompt)} content_len={len(content)} "
+            f"elapsed={elapsed:.2f}s"
+        )
         return self._parse_response(content)
 
     def _prepare_image_data(self, image_url: str | bytes) -> str:
         """将图片数据转换为 Ollama API 格式"""
         if isinstance(image_url, str):
-            # URL 格式，直接使用（需可访问）
             return image_url
         else:
-            # bytes → base64
             b64 = base64.b64encode(image_url).decode()
-            # 检测图片格式
             try:
                 img = Image.open(BytesIO(image_url))
                 media_type = f"image/{img.format.lower()}"
@@ -231,23 +250,23 @@ class OllamaProvider(BaseProvider):
             return f"data:{media_type};base64,{b64}"
 
     def _parse_response(self, content: str) -> dict:
-        """尝试解析 JSON 响应"""
-        import json
-
+        """尝试解析 JSON 响应（支持代码块包裹和纯文本）"""
         content = content.strip()
-        # 处理 markdown 代码块
         if content.startswith("```"):
             parts = content.split("```")
             if len(parts) >= 3:
                 content = parts[1]
-                # 去掉第一行的 json 标记
                 lines = content.split("\n")
                 if lines and lines[0].strip() in ("json",):
                     content = "\n".join(lines[1:])
-
         try:
-            return json.loads(content)
+            parsed = json.loads(content)
+            logger.debug(f"[Ollama] Parsed response keys: {list(parsed.keys())}")
+            return parsed
         except json.JSONDecodeError:
+            logger.debug(
+                f"[Ollama] Response not JSON, returning raw | len={len(content)}"
+            )
             return {"raw_response": content}
 
     # ──────────────────────────────────────────────────────────
@@ -264,6 +283,7 @@ class OllamaProvider(BaseProvider):
         """
         model_name = model or self._embed_model
 
+        start = time.monotonic()
         response = await self.client.post(
             "/api/embeddings",
             json={
@@ -271,12 +291,23 @@ class OllamaProvider(BaseProvider):
                 "prompt": text,
             },
         )
+        elapsed = time.monotonic() - start
         result = response.json()
-        return result["embedding"]
+        embedding = result["embedding"]
+
+        logger.info(
+            f"[Ollama] embed_text | model={model_name} "
+            f"text_len={len(text)} dim={len(embedding)} "
+            f"elapsed={elapsed:.2f}s"
+        )
+        return embedding
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
         """批量向量化"""
+        import asyncio
+
         model_name = self._embed_model
+        start = time.monotonic()
 
         async def embed_one(text: str) -> list[float]:
             response = await self.client.post(
@@ -285,8 +316,13 @@ class OllamaProvider(BaseProvider):
             )
             return response.json()["embedding"]
 
-        import asyncio
         results = await asyncio.gather(*[embed_one(t) for t in texts])
+        elapsed = time.monotonic() - start
+
+        logger.info(
+            f"[Ollama] embed_batch | model={model_name} "
+            f"count={len(texts)} elapsed={elapsed:.2f}s"
+        )
         return list(results)
 
     # ──────────────────────────────────────────────────────────

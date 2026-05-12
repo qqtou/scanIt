@@ -792,8 +792,9 @@ class TestLLMDetectionService:
         ]
 
         report = await service.generate_report(
-            results,
+            content="测试内容",
             content_type="image",
+            results=results,
             keywords=["test"],
         )
 
@@ -829,7 +830,12 @@ class TestLLMDetectionService:
             ),
         ]
 
-        report = await service.generate_report(results, "image", ["test"])
+        report = await service.generate_report(
+            content="测试内容",
+            content_type="image",
+            results=results,
+            keywords=["test"],
+        )
 
         assert "侵权检测报告" in report
         mock_provider.generate_text.assert_called_once()

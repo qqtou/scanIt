@@ -1,7 +1,7 @@
 """
 ScanIt 全局配置
 """
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 from pydantic_settings import BaseSettings
 from typing import List
 
@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     celery_result_backend: str = "redis://localhost:6379/2"
 
     # JWT Authentication
-    jwt_secret_key: str = "your-secret-key-change-in-production"  # 请在生产环境替换
+    jwt_secret_key: str = Field(default="", json_schema_extra={"env": "JWT_SECRET_KEY"})  # 必填，无默认值
     jwt_algorithm: str = "HS256"
     jwt_expiration_hours: int = 24
 
@@ -58,6 +58,9 @@ class Settings(BaseSettings):
 
     # Webhook
     webhook_timeout: int = 10
+
+    # LLM
+    ollama_base_url: str = "http://localhost:11434"
 
 
 

@@ -49,7 +49,12 @@ class Result(Base):
         index=True,
     )
 
-    # 来源信息
+    # 租户 ID（多租户隔离）
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     source_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     source_title: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     source_snippet: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -133,6 +138,7 @@ class Result(Base):
         Index("ix_results_user_risk", "user_id", "risk_level"),
         Index("ix_results_similarity", "similarity_score"),
         Index("ix_results_created_at", "created_at"),
+        Index("ix_results_tenant_id", "tenant_id"),
     )
 
     def __repr__(self) -> str:

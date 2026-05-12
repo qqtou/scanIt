@@ -13,7 +13,8 @@ class UserBase(BaseModel):
     email: EmailStr
     username: str
     full_name: str | None = None
-    role: str = "user"
+    role: str = "user"  # system_admin / tenant_admin / reviewer / user
+    tenant_id: UUID | None = None
 
 
 class UserCreate(UserBase):
@@ -39,6 +40,7 @@ class UserInDB(UserBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    tenant_id: UUID | None = None
     is_active: bool
     is_verified: bool
     api_quota: int

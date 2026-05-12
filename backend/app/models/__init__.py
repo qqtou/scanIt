@@ -2,6 +2,7 @@
 ScanIt 数据模型
 """
 from app.models.base import Base, get_db, get_engine, get_session_maker
+from app.models.tenant import Tenant, TenantPlan
 from app.models.user import User, UserRole
 from app.models.work import Work, ContentType
 from app.models.task import Task, TaskStatus, TaskPriority
@@ -26,6 +27,9 @@ __all__ = [
     "get_engine",
     "get_session_maker",
     "async_session_maker",
+    # Tenant
+    "Tenant",
+    "TenantPlan",
     # User
     "User",
     "UserRole",

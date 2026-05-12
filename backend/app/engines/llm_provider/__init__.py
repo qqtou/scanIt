@@ -80,6 +80,11 @@ __all__ = [
     "AliyunProvider",
     "OpenAIProvider",
     "AnthropicProvider",
+    # 快捷函数
+    "get_manager",
+    "get_text_provider",
+    "get_vision_provider",
+    "get_embed_provider",
 ]
 
 # 单例管理器实例 (延迟初始化)
@@ -107,3 +112,7 @@ def get_vision_provider(tier: ProviderTier | str | None = None):
 def get_embed_provider(tier: ProviderTier | str | None = None):
     """快捷方法: 获取向量嵌入 Provider"""
     return get_manager().get_embed_provider(tier)
+
+
+# 别名
+get_provider_manager = get_manager

@@ -9,6 +9,8 @@ class Token(BaseModel):
 
     access_token: str
     token_type: str = "bearer"
+    tenant_id: str | None = None
+    role: str | None = None
 
 
 class TokenData(BaseModel):
@@ -31,6 +33,7 @@ class RegisterRequest(BaseModel):
     username: str
     password: str
     full_name: str | None = None
+    invite_code: str | None = None  # 邀请码，用于租户分配
 
 
 class PasswordChange(BaseModel):

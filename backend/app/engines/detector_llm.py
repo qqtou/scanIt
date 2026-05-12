@@ -24,8 +24,9 @@ LLM 增强功能:
 
 import json
 import logging
+import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Union
 
 from app.engines.detector import DetectionResult, DetectionService
 from app.engines.llm_provider import (
@@ -221,7 +222,14 @@ class LLMDetectionService:
         self._manager: ProviderManager | None = None
 
         # 缓存最近使用的 Provider（避免频繁切换）
-        self._provider_cache: dict[Capability, BaseProvider | None] = {}
+        # 格式: capability_tier -> provider
+        self._provider_cache: dict[str, BaseProvider | None] = {}
+
+        # 当前使用的 Provider 名称（用于日志）
+        self._llm_provider_name: str | None = None
+        self._llm_provider_tier: str | None = None
+
+        logger.debug(f"[LLMDetection] Service initialized | config={self.config}")
 
     # ─────────────────────────────────────────────────────────────────────────
     # 初始化
@@ -237,16 +245,20 @@ class LLMDetectionService:
         capability: Capability,
         tier: ProviderTier | str | None = None,
     ) -> BaseProvider | None:
-        """获取 Provider（带缓存）"""
-        cache_key = capability
-        if tier:
-            cache_key = f"{capability}_{tier}"
+        """获取 Provider（带缓存，避免每次调用都重新查找）"""
+        tier_str = tier.value if isinstance(tier, ProviderTier) else (tier or "auto")
+        cache_key = f"{capability.value}_{tier_str}"
 
         if cache_key in self._provider_cache:
             return self._provider_cache[cache_key]
 
         manager = self._get_manager()
         provider = manager.get_provider(capability, tier) if tier else manager.get_provider(capability)
+
+        # 记录当前使用的 Provider（用于日志）
+        if provider:
+            self._llm_provider_name = provider.name
+            self._llm_provider_tier = provider.tier.value
 
         self._provider_cache[cache_key] = provider
         return provider
@@ -281,10 +293,19 @@ class LLMDetectionService:
         """
         tier = tier or self.config.keyword_llm_tier
         num = num_keywords or self.config.keyword_count
+        start = time.monotonic()
+
+        logger.info(
+            f"[LLM-Detect] generate_keywords_llm | type={content_type} "
+            f"tier={tier.value if isinstance(tier, ProviderTier) else tier}"
+        )
 
         provider = self._get_provider(Capability.TEXT_GENERATION, tier)
         if not provider:
-            logger.warning("[LLMDetection] No text provider available, falling back to rule-based")
+            logger.warning(
+                f"[LLM-Detect] No text provider for keyword generation, "
+                f"falling back to rule-based"
+            )
             return self._base.generate_keywords(content, content_type, num)
 
         content_type_display = {
@@ -295,7 +316,7 @@ class LLMDetectionService:
 
         prompt = KEYWORD_GENERATION_PROMPT.format(
             content_type=content_type_display,
-            content=content[:2000],  # 限制输入长度
+            content=content[:2000],  # 截断：大多数 LLM 单次输入上限 ~4k token，2000 字符约占 1k token，留余量给 prompt 模板
         )
 
         try:
@@ -306,33 +327,57 @@ class LLMDetectionService:
                 max_tokens=512,
             )
 
+            elapsed = time.monotonic() - start
             keywords = self._parse_json_list(result)
             if keywords:
-                logger.info(f"[LLMDetection] Generated {len(keywords)} keywords via LLM")
+                logger.info(
+                    f"[LLM-Detect] Keywords generated | provider={provider.name} "
+                    f"count={len(keywords)} elapsed={elapsed:.2f}s"
+                )
                 return keywords[:num]
+            else:
+                logger.warning(
+                    f"[LLM-Detect] Keyword parsing failed, falling back to rules | "
+                    f"provider={provider.name} elapsed={elapsed:.2f}s"
+                )
 
         except Exception as e:
-            logger.warning(f"[LLMDetection] LLM keyword generation failed: {e}")
+            elapsed = time.monotonic() - start
+            logger.warning(
+                f"[LLM-Detect] Keyword generation failed: {e} | "
+                f"provider={provider.name} elapsed={elapsed:.2f}s, "
+                f"falling back to rule-based"
+            )
 
         # 降级：使用规则提取
         return self._base.generate_keywords(content, content_type, num)
 
     def _parse_json_list(self, text: str) -> list[str]:
-        """从文本中解析 JSON 列表"""
+        """从 LLM 输出中解析 JSON 列表，处理各种格式变体
+
+        LLM 输出不稳定，可能返回以下任一格式：
+        1. ```json ["a", "b"] ``` — markdown 代码块包裹
+        2. ["a", "b"] — 直接 JSON
+        3. "a" "b" — 纯引号包裹（最差情况）
+
+        按优先级逐级降级解析，确保总能提取出关键词。
+        """
         text = text.strip()
 
-        # 提取 JSON 块
+        # 策略 1：提取 ```json ``` 包裹的代码块
         if "```json" in text:
             parts = text.split("```json")
             if len(parts) >= 2:
                 text = parts[1].split("```")[0]
         elif "```" in text:
+            # 无语言标记的代码块（LLM 有时不加 json 标记）
             parts = text.split("```")
             if len(parts) >= 3:
                 text = parts[1]
 
         text = text.strip()
 
+        # 策略 2：尝试直接 JSON 解析
         try:
             parsed = json.loads(text)
             if isinstance(parsed, list) and all(isinstance(x, str) for x in parsed):
@@ -340,9 +385,8 @@ class LLMDetectionService:
         except json.JSONDecodeError:
             pass
 
-        # 尝试从文本中提取
+        # 策略 3：正则兜底 — 提取所有双引号中的字符串（LLM 输出格式混乱时的最后手段）
         import re
-
         matches = re.findall(r'"([^"]+)"', text)
         if matches:
             return matches
@@ -376,10 +420,16 @@ class LLMDetectionService:
             dict: 解析后的分析结果
         """
         tier = tier or self.config.image_analysis_tier
+        start = time.monotonic()
+
+        logger.info(
+            f"[LLM-Detect] analyze_image_llm | tier="
+            f"{tier.value if isinstance(tier, ProviderTier) else tier}"
+        )
 
         provider = self._get_provider(Capability.IMAGE_UNDERSTANDING, tier)
         if not provider:
-            logger.warning("[LLMDetection] No vision provider available")
+            logger.warning("[LLM-Detect] No vision provider available for image analysis")
             return {"error": "No vision provider available"}
 
         try:
@@ -388,11 +438,19 @@ class LLMDetectionService:
                 prompt=prompt or IMAGE_ANALYSIS_PROMPT,
             )
 
-            logger.info(f"[LLMDetection] Image analyzed via {provider.name}")
+            elapsed = time.monotonic() - start
+            logger.info(
+                f"[LLM-Detect] Image analyzed | provider={provider.name} "
+                f"elapsed={elapsed:.2f}s"
+            )
             return result
 
         except Exception as e:
-            logger.warning(f"[LLMDetection] Image analysis failed: {e}")
+            elapsed = time.monotonic() - start
+            logger.warning(
+                f"[LLM-Detect] Image analysis failed: {e} | "
+                f"provider={provider.name} elapsed={elapsed:.2f}s"
+            )
             return {"error": str(e)}
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -420,26 +478,38 @@ class LLMDetectionService:
         Returns:
             float: 相似度分数 0.0-1.0
         """
+        start = time.monotonic()
+        logger.info(f"[LLM-Detect] compute_similarity_embedding | tier={tier}")
+
         provider = self._get_provider(Capability.EMBEDDING, tier)
         if not provider:
-            logger.warning("[LLMDetection] No embedding provider available")
+            logger.warning("[LLM-Detect] No embedding provider available")
             return 0.0
 
         try:
-            import numpy as np
+            import numpy as np  # lazy import：numpy 体积大且仅此方法使用，避免启动时加载拖慢服务
 
             vec1 = await provider.embed_text(text1)
             vec2 = await provider.embed_text(text2)
 
-            # 余弦相似度
+            # 余弦相似度：衡量两个向量在方向上的接近程度，范围 [-1, 1]，1 = 完全相同
             v1 = np.array(vec1)
             v2 = np.array(vec2)
             similarity = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
 
+            elapsed = time.monotonic() - start
+            logger.info(
+                f"[LLM-Detect] Embedding similarity | provider={provider.name} "
+                f"score={similarity:.4f} elapsed={elapsed:.2f}s"
+            )
             return float(similarity)
 
         except Exception as e:
-            logger.warning(f"[LLMDetection] Embedding similarity failed: {e}")
+            elapsed = time.monotonic() - start
+            logger.warning(
+                f"[LLM-Detect] Embedding similarity failed: {e} | "
+                f"elapsed={elapsed:.2f}s"
+            )
             return 0.0
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -448,19 +518,25 @@ class LLMDetectionService:
 
     async def generate_report(
         self,
-        detection_results: list[DetectionResult],
+        content: str,
         content_type: str,
-        keywords: list[str],
+        results: Union[list[DetectionResult], list[dict]],
+        keywords: list[str] | None = None,
         engines: list[str] | None = None,
         tier: ProviderTier | str | None = None,
     ) -> str:
         """
         使用 LLM 生成侵权检测报告
 
+        支持两种结果格式：
+        - list[DetectionResult]: 直接传入检测结果对象
+        - list[dict]: API 传入的字典列表（需从 dict 中提取字段）
+
         Args:
-            detection_results: 检测结果列表
+            content: 被检测内容
             content_type: 内容类型
-            keywords: 使用的关键词
+            results: 检测结果列表
+            keywords: 使用的关键词（默认取前5个）
             engines: 使用的搜索引擎
             tier: 使用的 Tier
 
@@ -468,37 +544,73 @@ class LLMDetectionService:
             str: 生成的报告文本
         """
         tier = tier or self.config.report_tier
+        start = time.monotonic()
+
+        logger.info(
+            f"[LLM-Detect] generate_report | type={content_type} "
+            f"results={len(results)} tier="
+            f"{tier.value if isinstance(tier, ProviderTier) else tier}"
+        )
 
         provider = self._get_provider(Capability.TEXT_GENERATION, tier)
         if not provider:
-            logger.warning("[LLMDetection] No text provider for report generation")
-            return self._generate_fallback_report(detection_results, content_type)
+            logger.warning(
+                f"[LLM-Detect] No text provider for report, using fallback"
+            )
+            return self._generate_fallback_report(results, content_type)
 
         from datetime import datetime
 
         # 统计风险分布
-        high_count = sum(1 for r in detection_results if r.risk_level == "high")
-        medium_count = sum(1 for r in detection_results if r.risk_level == "medium")
-        low_count = sum(1 for r in detection_results if r.risk_level == "low")
+        # 同时支持两种格式：API 层传入 list[dict]，内部调用传入 list[DetectionResult]
+        # 原因：/llm/detect 端点将 DetectionResult 序列化为 dict 后传给此方法，
+        # 而 detect_with_keywords 可直接传 DetectionResult 对象
+        high_count = medium_count = low_count = 0
+        for r in results:
+            # 同时支持 DetectionResult 对象和 dict
+            risk = r.risk_level if hasattr(r, "risk_level") else r.get("risk_level", "low")
+            if risk == "high":
+                high_count += 1
+            elif risk == "medium":
+                medium_count += 1
+            else:
+                low_count += 1
 
-        # 构建结果详情
+        # 构建结果详情文本（同时支持 DetectionResult 和 dict）
         results_detail = []
-        for i, r in enumerate(detection_results[:10]):  # 最多 10 条
+        for i, r in enumerate(results[:10]):  # 最多 10 条
+            if isinstance(r, dict):
+                title = r.get("title", "N/A")
+                url = r.get("url", "N/A")
+                domain = r.get("domain") or self._extract_domain(url)
+                similarity = r.get("similarity_score", 0.0)
+                risk = r.get("risk_level", "low")
+                engine = r.get("search_engine", "unknown")
+                keyword = r.get("search_keyword", keywords[0] if keywords else "N/A")
+            else:
+                title = getattr(r, "title", "N/A")
+                url = getattr(r, "url", "N/A")
+                domain = getattr(r, "domain") or self._extract_domain(url)
+                similarity = getattr(r, "similarity", 0.0)
+                risk = getattr(r, "risk_level", "low")
+                engine = getattr(r, "search_engine", "unknown")
+                keyword = getattr(r, "search_keyword", keywords[0] if keywords else "N/A")
+
             results_detail.append(
-                f"[{i + 1}] {r.title or 'N/A'}\n"
-                f"    URL: {r.url}\n"
-                f"    平台: {r.domain or 'N/A'}\n"
-                f"    相似度: {r.similarity:.2%}\n"
-                f"    风险等级: {r.risk_level.upper()}\n"
-                f"    搜索引擎: {r.search_engine} / 关键词: {r.search_keyword}"
+                f"[{i + 1}] {title}\n"
+                f"    URL: {url}\n"
+                f"    平台: {domain}\n"
+                f"    相似度: {similarity:.2%}\n"
+                f"    风险等级: {risk.upper()}\n"
+                f"    搜索引擎: {engine} / 关键词: {keyword}"
             )
 
         prompt = REPORT_GENERATION_PROMPT.format(
             content_type=content_type,
             detection_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             engines=", ".join(engines or []),
-            keywords=", ".join(keywords[:5]),
-            result_count=len(detection_results),
+            keywords=", ".join((keywords or [])[:5]),
+            result_count=len(results),
             results_detail="\n\n".join(results_detail) if results_detail else "无检测结果",
         )
 
@@ -510,29 +622,56 @@ class LLMDetectionService:
                 max_tokens=2048,
             )
 
-            logger.info(f"[LLMDetection] Report generated via {provider.name}")
+            elapsed = time.monotonic() - start
+            logger.info(
+                f"[LLM-Detect] Report generated | provider={provider.name} "
+                f"chars={len(report)} elapsed={elapsed:.2f}s"
+            )
             return report.strip()
 
         except Exception as e:
-            logger.warning(f"[LLMDetection] Report generation failed: {e}")
-            return self._generate_fallback_report(detection_results, content_type)
+            elapsed = time.monotonic() - start
+            logger.warning(
+                f"[LLM-Detect] Report generation failed: {e} | "
+                f"provider={provider.name} elapsed={elapsed:.2f}s, "
+                f"using fallback"
+            )
+            return self._generate_fallback_report(results, content_type)
+
+    def _extract_domain(self, url: str) -> str:
+        """从 URL 提取域名"""
+        if not url or url == "N/A":
+            return "N/A"
+        try:
+            from urllib.parse import urlparse
+            return urlparse(url).netloc or "N/A"
+        except Exception:
+            return "N/A"
 
     def _generate_fallback_report(
         self,
-        detection_results: list[DetectionResult],
+        results: Union[list[DetectionResult], list[dict]],
         content_type: str,
     ) -> str:
-        """生成降级版纯文本报告（不调用 LLM）"""
-        high = [r for r in detection_results if r.risk_level == "high"]
-        medium = [r for r in detection_results if r.risk_level == "medium"]
-        low = [r for r in detection_results if r.risk_level == "low"]
+        """生成降级版纯文本报告（不调用 LLM，作为各步骤的兜底）"""
+        high = []
+        medium = []
+        low = []
+        for r in results:
+            risk = r.risk_level if hasattr(r, "risk_level") else r.get("risk_level", "low")
+            if risk == "high":
+                high.append(r)
+            elif risk == "medium":
+                medium.append(r)
+            else:
+                low.append(r)
 
         lines = [
-            f"侵权检测报告",
+            f"侵权检测报告（降级模式，未调用 LLM）",
             f"=" * 50,
             f"",
             f"检测类型: {content_type}",
-            f"检测到结果: {len(detection_results)} 条",
+            f"检测到结果: {len(results)} 条",
             f"  - 高风险: {len(high)} 条",
             f"  - 中风险: {len(medium)} 条",
             f"  - 低风险: {len(low)} 条",
@@ -543,12 +682,15 @@ class LLMDetectionService:
             lines.append("高风险侵权详情:")
             lines.append("-" * 30)
             for i, r in enumerate(high, 1):
+                title = getattr(r, "title", None) or (r.get("title") if isinstance(r, dict) else "N/A")
+                url = getattr(r, "url", None) or (r.get("url") if isinstance(r, dict) else "N/A")
+                sim = getattr(r, "similarity", 0.0) or (r.get("similarity_score", 0.0) if isinstance(r, dict) else 0.0)
+                domain = getattr(r, "domain", None) or (r.get("domain") if isinstance(r, dict) else self._extract_domain(url))
                 lines.append(
-                    f"{i}. {r.title or 'N/A'}"
-                    f"\n   URL: {r.url}"
-                    f"\n   相似度: {r.similarity:.2%}"
-                    f"\n   平台: {r.domain or 'N/A'}"
-                    f"\n"
+                    f"{i}. {title or 'N/A'}\n"
+                    f"   URL: {url or 'N/A'}\n"
+                    f"   相似度: {sim:.2%}\n"
+                    f"   平台: {domain or 'N/A'}"
                 )
 
         lines.append("\n建议处置方式:")
@@ -571,7 +713,7 @@ class LLMDetectionService:
         custom_keywords: list[str] | None = None,
         use_llm_keywords: bool = True,
         max_results: int = 50,
-    ) -> tuple[list[str], list[DetectionResult]]:
+    ) -> list[DetectionResult]:
         """
         一步完成：关键词生成 + 侵权检测
 
@@ -583,9 +725,16 @@ class LLMDetectionService:
             max_results: 最大结果数
 
         Returns:
-            (keywords, results): 关键词列表和检测结果
+            list[DetectionResult]: 检测结果列表
         """
-        # 生成关键词
+        start = time.monotonic()
+        logger.info(
+            f"[LLM-Detect] detect_with_keywords | type={content_type} "
+            f"custom_kw={bool(custom_keywords)} llm_kw={use_llm_keywords} "
+            f"max_results={max_results}"
+        )
+
+        # Step 1: 生成关键词
         if custom_keywords:
             keywords = custom_keywords
         elif use_llm_keywords and self.config.keyword_llm_enabled:
@@ -593,7 +742,9 @@ class LLMDetectionService:
         else:
             keywords = self._base.generate_keywords(content, content_type)
 
-        # 执行检测
+        logger.info(f"[LLM-Detect] Keywords ready: {len(keywords)} | {keywords}")
+
+        # Step 2: 执行检测
         results = []
         async for result in self._base.detect(
             content=content,
@@ -603,7 +754,15 @@ class LLMDetectionService:
         ):
             results.append(result)
 
-        return keywords, results
+        elapsed = time.monotonic() - start
+        high = sum(1 for r in results if r.risk_level == "high")
+        medium = sum(1 for r in results if r.risk_level == "medium")
+        logger.info(
+            f"[LLM-Detect] Detection done | results={len(results)} "
+            f"(high={high} medium={medium} low={len(results)-high-medium}) "
+            f"elapsed={elapsed:.2f}s"
+        )
+        return results
 
     # ─────────────────────────────────────────────────────────────────────────
     # 代理方法：透传 DetectionService 的方法
@@ -632,7 +791,10 @@ class LLMDetectionService:
         return self._base.quick_check(*args, **kwargs)
 
 
-# 全局单例（延迟初始化）
+# ─────────────────────────────────────────────────────────────────────────────
+# 全局单例（延迟初始化，避免启动时阻塞）
+# ─────────────────────────────────────────────────────────────────────────────
+
 _llm_detection_service: LLMDetectionService | None = None
 
 

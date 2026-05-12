@@ -24,8 +24,9 @@ from sqlalchemy.pool import NullPool
 
 from app.main import app
 from app.models.base import Base
-from app.models import User, Work, Task, Result
+from app.models import User, Work, Task, Result, Tenant
 from app.api.deps import get_password_hash
+import uuid
 
 
 @pytest.fixture(scope="session")
@@ -95,7 +96,23 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest.fixture(scope="function")
-async def test_user(db_session: AsyncSession) -> User:
+async def test_tenant(db_session: AsyncSession) -> Tenant:
+    """创建测试租户"""
+    tenant = Tenant(
+        id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
+        name="Test Tenant",
+        slug="test",
+        plan="basic",
+        quota_monthly=100,
+    )
+    db_session.add(tenant)
+    await db_session.commit()
+    await db_session.refresh(tenant)
+    return tenant
+
+
+@pytest.fixture(scope="function")
+async def test_user(db_session: AsyncSession, test_tenant: Tenant) -> User:
     """创建测试用户"""
     user = User(
         email="test@example.com",
@@ -103,6 +120,7 @@ async def test_user(db_session: AsyncSession) -> User:
         hashed_password=get_password_hash("testpassword"),
         role="user",
         is_active=True,
+        tenant_id=test_tenant.id,
     )
     db_session.add(user)
     await db_session.commit()
@@ -111,14 +129,15 @@ async def test_user(db_session: AsyncSession) -> User:
 
 
 @pytest.fixture(scope="function")
-async def admin_user(db_session: AsyncSession) -> User:
+async def admin_user(db_session: AsyncSession, test_tenant: Tenant) -> User:
     """创建管理员用户"""
     user = User(
         email="admin@example.com",
         username="admin",
         hashed_password=get_password_hash("adminpassword"),
-        role="admin",
+        role="tenant_admin",
         is_active=True,
+        tenant_id=test_tenant.id,
     )
     db_session.add(user)
     await db_session.commit()
@@ -127,10 +146,11 @@ async def admin_user(db_session: AsyncSession) -> User:
 
 
 @pytest.fixture(scope="function")
-async def test_work(db_session: AsyncSession, test_user: User) -> Work:
+async def test_work(db_session: AsyncSession, test_user: User, test_tenant: Tenant) -> Work:
     """创建测试作品"""
     work = Work(
         user_id=test_user.id,
+        tenant_id=test_tenant.id,
         title="测试作品",
         content_type="text",
         content_url="https://example.com/test",
@@ -143,17 +163,40 @@ async def test_work(db_session: AsyncSession, test_user: User) -> Work:
 
 
 @pytest.fixture(scope="function")
-async def test_task(db_session: AsyncSession, test_user: User, test_work: Work) -> Task:
+async def test_task(db_session: AsyncSession, test_user: User, test_work: Work, test_tenant: Tenant) -> Task:
     """创建测试任务"""
     task = Task(
         user_id=test_user.id,
         work_id=test_work.id,
+        tenant_id=test_tenant.id,
         status="pending",
     )
     db_session.add(task)
     await db_session.commit()
     await db_session.refresh(task)
     return task
+
+
+@pytest.fixture(scope="function")
+async def test_result(db_session: AsyncSession, test_user: User, test_work: Work, test_task: Task, test_tenant: Tenant) -> Result:
+    """创建测试结果"""
+    result = Result(
+        task_id=test_task.id,
+        work_id=test_work.id,
+        user_id=test_user.id,
+        tenant_id=test_tenant.id,
+        source_url="https://example.com",
+        source_title="疑似侵权",
+        source_snippet="内容",
+        content_type="text",
+        similarity_score=0.85,
+        risk_level="high",
+        search_engine="google",
+    )
+    db_session.add(result)
+    await db_session.commit()
+    await db_session.refresh(result)
+    return result
 
 
 @pytest.fixture(scope="function")

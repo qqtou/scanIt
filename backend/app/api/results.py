@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Result, Task, User
+from app.models import Result, Task, Tenant, User
 from app.models.base import get_db
 from app.schemas.result import (
     ResultInDB,
@@ -17,7 +17,7 @@ from app.schemas.result import (
     RiskSummary,
     TaskReport,
 )
-from app.api.deps import get_current_active_user
+from app.api.deps import get_current_active_user, get_current_tenant
 
 router = APIRouter(prefix="/results", tags=["Results"])
 
@@ -35,6 +35,9 @@ async def list_results(
 ) -> dict:
     """获取所有检测结果"""
     query = select(Result).where(Result.user_id == current_user.id)
+    # 租户隔离
+    if current_user.tenant_id:
+        query = query.where(Result.tenant_id == current_user.tenant_id)
 
     if risk_level:
         query = query.where(Result.risk_level == risk_level)
@@ -99,6 +102,9 @@ async def list_results_by_task(
 
     # 查询结果
     query = select(Result).where(Result.task_id == task_id)
+    # 租户隔离
+    if current_user.tenant_id:
+        query = query.where(Result.tenant_id == current_user.tenant_id)
 
     if risk_level:
         query = query.where(Result.risk_level == risk_level)
@@ -195,6 +201,11 @@ async def get_result(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Result not found",
         )
+    if current_user.tenant_id and result_obj.tenant_id != current_user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Result not found",
+        )
     return result_obj
 
 
@@ -214,6 +225,11 @@ async def update_result(
     )
     result_obj = result.scalar_one_or_none()
     if not result_obj:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Result not found",
+        )
+    if current_user.tenant_id and result_obj.tenant_id != current_user.tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Result not found",

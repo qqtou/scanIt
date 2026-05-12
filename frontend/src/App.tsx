@@ -8,6 +8,7 @@ import Works from "./pages/Works";
 import Tasks from "./pages/Tasks";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
+import AdminDashboard from "./pages/AdminDashboard";
 
 // 图标组件
 const DashboardIcon = () => (
@@ -47,7 +48,12 @@ const LogoutIcon = () => (
   </svg>
 );
 
-type Page = "dashboard" | "works" | "tasks" | "reports" | "settings";
+type Page = "dashboard" | "works" | "tasks" | "reports" | "settings" | "admin";
+
+// 判断是否为管理员角色
+function isAdminRole(role: string): boolean {
+  return role === "system_admin" || role === "tenant_admin";
+}
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -92,6 +98,11 @@ function App() {
     { id: "settings" as Page, label: "设置", icon: <SettingsIcon /> },
   ];
 
+  // 管理员额外导航
+  const adminNavItems = [
+    { id: "admin" as Page, label: "管理后台", icon: <SettingsIcon /> },
+  ];
+
   const renderPage = () => {
     switch (currentPage) {
       case "dashboard":
@@ -104,6 +115,8 @@ function App() {
         return <Reports />;
       case "settings":
         return <Settings />;
+      case "admin":
+        return <AdminDashboard />;
       default:
         return <Dashboard />;
     }
@@ -131,6 +144,24 @@ function App() {
               <span>{item.label}</span>
             </div>
           ))}
+          {/* 管理员导航 */}
+          {user && isAdminRole(user.role) && (
+            <>
+              <div style={{ padding: "10px 20px", borderTop: "1px solid rgba(255,255,255,0.1)", marginTop: "10px" }}>
+                <span style={{ fontSize: "12px", opacity: 0.6 }}>管理</span>
+              </div>
+              {adminNavItems.map((item) => (
+                <div
+                  key={item.id}
+                  className={`nav-item ${currentPage === item.id ? "active" : ""}`}
+                  onClick={() => setCurrentPage(item.id)}
+                >
+                  {item.icon}
+                  <span>{item.label}</span>
+                </div>
+              ))}
+            </>
+          )}
         </nav>
 
         <div style={{ padding: "20px", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
