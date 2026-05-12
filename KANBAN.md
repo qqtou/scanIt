@@ -38,7 +38,7 @@ M7 [░░░░░░░░░░]   0% 🔄 生产优化
 |----|------|--------|------|------|
 | S2.1 | 后端测试覆盖率 80%+ | 🟡 中 | ✅ | 78 passed，tenant_id 已修复 |
 | S2.2 | 前端单元测试 | 🟡 中 | ✅ | Vitest + React Testing Library 已配置 |
-| S2.3 | E2E 测试 | 🟡 中 | ⬜ | Playwright 关键流程 |
+| S2.3 | E2E 测试 | 🟡 中 | ✅ | Playwright 关键流程 |
 | S2.4 | pre-commit hooks | 🟡 中 | ✅ | black, isort, mypy, eslint 已配置 |
 
 ### Phase 3: CI/CD 完善 ✅ 已完成（3/4）
