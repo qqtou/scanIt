@@ -1,6 +1,6 @@
 # ScanIt 前端 Dockerfile - 多阶段构建
 # Stage 1: Builder
-FROM node:20-alpine AS builder
+FROM node:26-alpine AS builder
 
 WORKDIR /app
 
