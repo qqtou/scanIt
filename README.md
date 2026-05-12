@@ -211,8 +211,19 @@ cd scanit
 
 ### 2. 配置环境变量
 ```bash
-cp .env.production .env
+cp .env.example .env
 # 编辑 .env 填写实际配置
+```
+
+**关键配置项**：
+
+```env
+# 搜索引擎（至少配置一个）
+SEARCH_PROVIDER=bocha
+BOCHA_API_KEY=your_key  # 申请地址: https://open.bochaai.com
+
+# JWT 密钥（必须修改）
+JWT_SECRET_KEY=your_random_secret_key
 ```
 
 ### 3. 启动服务
@@ -234,6 +245,18 @@ docker-compose exec backend alembic upgrade head
 - API 文档：http://localhost:8000/docs
 - Flower 监控：http://localhost:5555
 
+### 搜索引擎配置指南
+
+| 场景 | 推荐方案 | 成本 |
+|------|----------|------|
+| 测试/演示 | Google Custom Search | 免费 100 次/天 |
+| 国内生产 | 博查 AI | ¥0.002/次 |
+| 企业级 | Bright Data | $500+/月 |
+
+**详细文档**：
+- [搜索引擎部署指南](docs/SEARCH_DEPLOY.md) — 分层配置、申请流程、常见问题
+- [搜索引擎架构设计](docs/SEARCH_PROVIDER_DESIGN.md) — 技术实现、成本对比
+
 ## ⚙️ 环境变量
 
 ### 基础配置
@@ -247,9 +270,12 @@ docker-compose exec backend alembic upgrade head
 ### 搜索引擎
 | 变量 | 必填 | 说明 |
 |------|------|------|
-| `GOOGLE_API_KEY` | ❌ | Google 搜索 API |
-| `BING_API_KEY` | ❌ | Bing 搜索 API |
-| `BAIDU_API_KEY` | ❌ | 百度搜索 API |
+| `SEARCH_PROVIDER` | ✅ | 搜索引擎选择：google/bing/bocha/serpapi/brightdata |
+| `BOCHA_API_KEY` | 推荐 | 博查 AI（国内首选，¥0.002/次）|
+| `GOOGLE_API_KEY` | ❌ | Google 搜索 API（免费 100 次/天）|
+| `GOOGLE_SEARCH_ENGINE_ID` | ❌ | Google CX（搜索引擎 ID）|
+| `BING_API_KEY` | ❌ | Bing 搜索 API（免费 1000 次/月）|
+| `SEARCH_SCRAPE_ENABLED` | ❌ | 爬虫模式（默认 false，禁用推荐）|
 
 ### 邮件
 | 变量 | 必填 | 说明 |

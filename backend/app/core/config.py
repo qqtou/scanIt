@@ -32,11 +32,30 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expiration_hours: int = 24
 
-    # API Keys (请替换为真实密钥)
+    # 搜索引擎分层配置
+    search_provider: str = "google"  # google/bing/bocha/serpapi/brightdata
+
+    # Tier 0: 免费测试
     google_api_key: str = ""
     google_search_engine_id: str = ""
     bing_api_key: str = ""
     baidu_api_key: str = ""
+
+    # Tier 1: 低成本（博查 AI）
+    bocha_api_key: str = ""
+
+    # Tier 2: 企业级
+    serpapi_key: str = ""
+    brightdata_api_key: str = ""
+    brightdata_zone: str = ""
+
+    # 搜索降级策略
+    search_fallback_order: List[str] = ["bocha", "google", "bing"]
+    search_scrape_enabled: bool = False  # 禁用爬虫模式（推荐）
+
+    # 搜索限流
+    search_rate_limit: int = 10  # 每秒最多 10 次
+    search_timeout: int = 30     # 超时 30 秒
 
     # 检测阈值
     text_similarity_threshold: float = 0.8

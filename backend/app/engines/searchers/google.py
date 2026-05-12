@@ -130,7 +130,28 @@ class GoogleSearcher(SearcherBase):
                 pass
 
     async def _search_via_scrape(self, config: SearchConfig) -> AsyncIterator[SearchResult]:
-        """通过网页抓取搜索（备用方案）"""
+        """通过网页抓取搜索（已禁用）
+
+        网页抓取存在反爬风险（IP 封禁、验证码、429），
+        生产环境请使用官方 API 或 SERP API 服务。
+        """
+        from app.core.config import settings
+        from app.core.logging import logger
+
+        if not settings.search_scrape_enabled:
+            logger.error(
+                "[Google] Scraping disabled | "
+                "请配置官方 API Key 或设置 SEARCH_SCRAPE_ENABLED=true（不推荐）"
+            )
+            raise ValueError(
+                "网页抓取模式已禁用，请配置以下任一 API Key：\n"
+                "  - BOCHA_API_KEY（推荐国内使用）\n"
+                "  - GOOGLE_API_KEY + GOOGLE_SEARCH_ENGINE_ID\n"
+                "  - BING_API_KEY\n"
+                "或设置 SEARCH_SCRAPE_ENABLED=true 启用爬虫模式（不推荐）"
+            )
+
+        # 爬虫代码（仅在明确启用时执行）
         from bs4 import BeautifulSoup
 
         params = {
@@ -146,6 +167,8 @@ class GoogleSearcher(SearcherBase):
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         }
+
+        logger.warning("[Google] Scraping enabled (not recommended) | query=%s", config.query)
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
