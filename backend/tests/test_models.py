@@ -66,10 +66,11 @@ class TestUserModel:
 class TestWorkModel:
     """作品模型测试"""
     
-    async def test_create_text_work(self, db_session, test_user):
+    async def test_create_text_work(self, db_session, test_user, test_tenant):
         """测试创建文本作品"""
         work = Work(
             user_id=test_user.id,
+            tenant_id=test_tenant.id,
             title="测试文本作品",
             content_type="text",
             content_url="https://example.com/text",
@@ -84,10 +85,11 @@ class TestWorkModel:
         assert work.content_url == "https://example.com/text"
         assert work.content_hash == "abc123def456"
     
-    async def test_create_image_work(self, db_session, test_user):
+    async def test_create_image_work(self, db_session, test_user, test_tenant):
         """测试创建图片作品"""
         work = Work(
             user_id=test_user.id,
+            tenant_id=test_tenant.id,
             title="测试图片作品",
             content_type="image",
             content_url="https://example.com/image.jpg",
@@ -100,10 +102,11 @@ class TestWorkModel:
         assert work.content_type == "image"
         assert work.mime_type == "image/jpeg"
     
-    async def test_create_video_work(self, db_session, test_user):
+    async def test_create_video_work(self, db_session, test_user, test_tenant):
         """测试创建视频作品"""
         work = Work(
             user_id=test_user.id,
+            tenant_id=test_tenant.id,
             title="测试视频作品",
             content_type="video",
             content_url="https://example.com/video.mp4",
@@ -121,11 +124,12 @@ class TestWorkModel:
 class TestTaskModel:
     """任务模型测试"""
     
-    async def test_create_detection_task(self, db_session, test_user, test_work):
+    async def test_create_detection_task(self, db_session, test_user, test_work, test_tenant):
         """测试创建检测任务"""
         task = Task(
             user_id=test_user.id,
             work_id=test_work.id,
+            tenant_id=test_tenant.id,
             title="检测任务",
             status="pending",
             search_engines=["google", "bing"],
@@ -138,11 +142,12 @@ class TestTaskModel:
         assert "google" in task.search_engines
         assert "bing" in task.search_engines
     
-    async def test_task_status_transitions(self, db_session, test_user, test_work):
+    async def test_task_status_transitions(self, db_session, test_user, test_work, test_tenant):
         """测试任务状态转换"""
         task = Task(
             user_id=test_user.id,
             work_id=test_work.id,
+            tenant_id=test_tenant.id,
             status="pending",
         )
         db_session.add(task)
@@ -167,12 +172,13 @@ class TestTaskModel:
 class TestResultModel:
     """结果模型测试"""
     
-    async def test_create_result(self, db_session, test_user, test_task, test_work):
+    async def test_create_result(self, db_session, test_user, test_task, test_work, test_tenant):
         """测试创建检测结果"""
         result = Result(
             task_id=test_task.id,
             user_id=test_user.id,
             work_id=test_work.id,
+            tenant_id=test_tenant.id,
             risk_level="high",
             source_url="https://example.com/infringing",
             source_title="疑似侵权内容",
@@ -188,7 +194,7 @@ class TestResultModel:
         assert result.risk_level == "high"
         assert result.similarity_score == 0.95
     
-    async def test_result_risk_levels(self, db_session, test_user, test_task, test_work):
+    async def test_result_risk_levels(self, db_session, test_user, test_task, test_work, test_tenant):
         """测试不同风险等级"""
         risk_levels = ["high", "medium", "low", "safe"]
         for i, risk_level in enumerate(risk_levels):
@@ -196,6 +202,7 @@ class TestResultModel:
                 task_id=test_task.id,
                 user_id=test_user.id,
                 work_id=test_work.id,
+                tenant_id=test_tenant.id,
                 risk_level=risk_level,
                 source_url=f"https://example.com/result_{i}",
                 source_title=f"结果 {risk_level}",
@@ -211,10 +218,11 @@ class TestResultModel:
 
 # Pytest fixture for test_work and test_task
 @pytest.fixture
-async def test_work(db_session, test_user):
+async def test_work(db_session, test_user, test_tenant):
     """创建测试作品"""
     work = Work(
         user_id=test_user.id,
+        tenant_id=test_tenant.id,
         title="测试作品",
         content_type="text",
         content_url="https://example.com/test",
@@ -227,11 +235,12 @@ async def test_work(db_session, test_user):
 
 
 @pytest.fixture
-async def test_task(db_session, test_user, test_work):
+async def test_task(db_session, test_user, test_work, test_tenant):
     """创建测试任务"""
     task = Task(
         user_id=test_user.id,
         work_id=test_work.id,
+        tenant_id=test_tenant.id,
         status="pending",
     )
     db_session.add(task)
