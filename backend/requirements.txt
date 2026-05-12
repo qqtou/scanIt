@@ -14,7 +14,7 @@ asyncpg==0.30.0
 alembic==1.13.3
 
 # Vector Database
-qdrant-client==1.12.1
+qdrant-client==1.18.0
 
 # Search Engine
 requests==2.32.3
