@@ -1,0 +1,83 @@
+groups:
+  - name: scanit_alerts
+    rules:
+      # 高错误率告警
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(scanit_http_requests_total{status=~"4..|5.."}[5m])) 
+          / 
+          sum(rate(scanit_http_requests_total[5m])) 
+          > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ScanIt 高错误率告警"
+          description: "错误率超过 5%（当前值：{{ $value | humanizePercentage }}），服务：{{ $labels.endpoint }}"
+
+      # 高延迟告警
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, rate(scanit_http_request_duration_seconds_bucket[5m])) 
+          > 1.0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ScanIt 高延迟告警"
+          description: "p95 延迟超过 1 秒（当前值：{{ $value }}s），端点：{{ $labels.endpoint }}"
+
+      # 检测任务失败告警
+      - alert: DetectionTaskFailure
+        expr: |
+          increase(scanit_detection_total{status="failed"}[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ScanIt 检测任务失败"
+          description: "检测任务失败，租户：{{ $labels.tenant_id }}，类型：{{ $labels.content_type }}"
+
+      # LLM API 调用失败告警
+      - alert: LLMApiFailure
+        expr: |
+          increase(scanit_llm_calls_total{status="error"}[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ScanIt LLM API 调用失败"
+          description: "LLM API 调用失败，Provider：{{ $labels.provider }}，Tier：{{ $labels.tier }}"
+
+      # 配额使用率过高告警
+      - alert: QuotaUsageHigh
+        expr: |
+          scanit_quota_usage > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ScanIt 配额使用率过高"
+          description: "租户 {{ $labels.tenant_id }} 配额使用率超过 80%（当前值：{{ $value | humanizePercentage }}）"
+
+      # 服务 Down 告警
+      - alert: ServiceDown
+        expr: |
+          up{job="scanit-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ScanIt 后端服务 Down"
+          description: "后端服务已停止响应超过 1 分钟"
+
+      # 活跃任务数过多告警
+      - alert: TooManyActiveTasks
+        expr: |
+          scanit_active_tasks > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ScanIt 活跃任务数过多"
+          description: "当前活跃任务数：{{ $value }}，可能影响性能"

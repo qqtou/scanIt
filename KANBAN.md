@@ -54,10 +54,10 @@ M7 [░░░░░░░░░░]   0% 🔄 生产优化
 
 | ID | 任务 | 优先级 | 状态 | 说明 |
 |----|------|--------|------|------|
-| S4.1 | Prometheus 指标 | 🟡 中 | ⬜ | 请求量、延迟、错误率 |
-| S4.2 | Grafana 仪表盘 | 🟡 中 | ⬜ | 可视化监控 |
-| S4.3 | Sentry 错误追踪 | 🟡 中 | ⬜ | 前后端错误收集 |
-| S4.4 | 告警规则 | 🟡 中 | ⬜ | 错误率 > 5% 告警 |
+| S4.1 | Prometheus 指标 | 🟡 中 | ✅ | metrics.py + main.py 集成完成 |
+| S4.2 | Grafana 仪表盘 | 🟡 中 | ✅ | docker-compose.monitoring.yml + 仪表盘 JSON |
+| S4.3 | Sentry 错误追踪 | 🟡 中 | ✅ | 前后端完成（sentry.py + sentry.ts + main 集成） |
+| S4.4 | 告警规则 | 🟡 中 | ✅ | alerts.yml + alertmanager.yml + prometheus.yml 集成完成 |
 
 ### Phase 5: 性能优化（低优先级）
 

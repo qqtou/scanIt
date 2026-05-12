@@ -12,6 +12,7 @@ from slowapi.errors import RateLimitExceeded
 from app.api import api_router
 from app.core.config import settings
 from app.core.logging import logger
+from app.core.sentry import init_sentry
 from app.models.base import engine
 
 
@@ -27,6 +28,9 @@ async def lifespan(app: FastAPI):
         raise ValueError("JWT_SECRET_KEY 环境变量未设置，拒绝启动")
     if len(settings.jwt_secret_key) < 32:
         raise ValueError("JWT_SECRET_KEY 长度不足 32 字符，请使用更安全的密钥")
+    
+    # 初始化 Sentry
+    init_sentry()
     
     logger.info(f"ScanIt API 启动完成，debug={settings.debug}")
     
@@ -58,6 +62,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Prometheus 指标中间件
+app.middleware("http")(metrics_middleware)
+
 # Include API routes
 app.include_router(api_router)
 
@@ -71,3 +78,9 @@ async def root(request: Request):
 @app.get("/health")
 async def health():
     return {"status": "healthy"}
+
+
+@app.get("/metrics")
+async def get_metrics():
+    """Prometheus 指标端点"""
+    return metrics_endpoint()

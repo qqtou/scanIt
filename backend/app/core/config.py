@@ -78,6 +78,10 @@ class Settings(BaseSettings):
     # Webhook
     webhook_timeout: int = 10
 
+    # Sentry 错误追踪
+    sentry_dsn: str = ""  # Sentry DSN，为空则禁用
+    app_version: str = "0.1.0"
+
     # LLM
     ollama_base_url: str = "http://localhost:11434"
 
