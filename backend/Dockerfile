@@ -1,6 +1,6 @@
 # ScanIt 后端 Dockerfile - 多阶段构建
 # Stage 1: Builder
-FROM python:3.11-slim AS builder
+FROM python:3.14-slim AS builder
 
 WORKDIR /app
 
@@ -15,7 +15,7 @@ COPY backend/pyproject.toml backend/
 RUN pip install --no-cache-dir --prefix=/install -e .
 
 # Stage 2: Runtime
-FROM python:3.11-slim AS runtime
+FROM python:3.14-slim AS runtime
 
 WORKDIR /app
 
