@@ -7,7 +7,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from sqlalchemy import select
+from sqlalchemy import cast, select, String
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -54,10 +54,12 @@ async def get_current_user(
         user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception
+        # SQLAlchemy Uuid 类型将参数转为 32 位 hex 无连字符格式与数据库存储的带连字符格式不匹配
+        # 使用 cast 将 UUID 列转为字符串后再比较
     except JWTError:
         raise credentials_exception
 
-    result = await db.execute(select(User).where(User.id == UUID(user_id)))
+    result = await db.execute(select(User).where(cast(User.id, String) == user_id))
     user = result.scalar_one_or_none()
     if user is None:
         raise credentials_exception

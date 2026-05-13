@@ -11,11 +11,12 @@ class Settings(BaseSettings):
     # App
     app_name: str = "ScanIt"
     debug: bool = False  # 生产环境默认关闭
-    cors_origins: List[str] = ["http://localhost:3000", "http://localhost:5173"]
+    cors_origins: List[str] = ["http://localhost:3000", "http://localhost:5173", "http://localhost:5174"]
 
     # Database
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/scanit"
-    database_pool_size: int = 10
+    # 默认 SQLite（本地开发），生产环境通过 .env 切换 PostgreSQL
+    database_url: str = "sqlite+aiosqlite:///./scanit_dev.db"
+    database_pool_size: int = 0  # SQLite 不支持连接池
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"

@@ -200,6 +200,56 @@ ScanIt/
 ## 🚀 快速开始
 
 ### 环境要求
+- Docker 24.0+ (Docker Desktop 4.25+)
+- Docker Compose v2.20+
+- Windows: Docker Desktop for Windows
+- macOS: Docker Desktop for Mac
+- Linux: Docker Engine + Docker Compose Plugin
+
+### Windows 本机一键部署
+
+> **推荐**：Windows 开发者使用此方式，一条命令启动全部服务
+
+```powershell
+# 1. 进入项目目录
+cd scanit
+
+# 2. 复制并编辑环境变量
+copy deploy\local\.env.example .env
+# 用记事本或 VS Code 编辑 .env，填写 API Key
+
+# 3. 一键启动（首次启动自动构建镜像）
+.\deploy\local\start.ps1 -Build
+
+# 4. 访问
+# 前端:     http://localhost:3000
+# 后端 API: http://localhost:8000
+# API 文档: http://localhost:8000/docs
+# Flower:   http://localhost:5555
+```
+
+**常用命令**：
+```powershell
+# 停止服务
+.\deploy\local\stop.ps1
+
+# 停止并清理数据（重置）
+.\deploy\local\stop.ps1 -Clean
+
+# 查看日志
+.\deploy\local\logs.ps1 -Follow        # 所有服务
+.\deploy\local\logs.ps1 backend -Tail 50 # 后端最近 50 行
+```
+
+**必需的 API Key**（至少配置一个）：
+- **搜索引擎**: `GOOGLE_API_KEY` 或 `BOCHA_API_KEY`
+- **LLM**: `AI_TIER=local` 使用本地 Ollama（需先安装）或填写 `DOUYIN_API_KEY`/`ZHIPU_API_KEY`
+
+---
+
+### Linux / macOS 部署
+
+#### 环境要求
 - Docker 24.0+
 - Docker Compose v2.20+
 

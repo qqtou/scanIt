@@ -48,12 +48,17 @@ def get_engine() -> AsyncEngine:
         else:
             url = settings.database_url
         
-        _engine = create_async_engine(
-            url,
-            echo=settings.debug,
-            pool_size=settings.database_pool_size if not TESTING else None,
-            pool_pre_ping=True,
-        )
+        is_sqlite = "sqlite" in url
+        
+        # SQLite 不支持 pool_size 和 pool_pre_ping，需要完全跳过这些参数
+        engine_kwargs = {"echo": settings.debug}
+        if not (TESTING or is_sqlite):
+            engine_kwargs["pool_size"] = settings.database_pool_size
+            engine_kwargs["pool_pre_ping"] = True
+        else:
+            engine_kwargs["pool_pre_ping"] = False
+        
+        _engine = create_async_engine(url, **engine_kwargs)
     return _engine
 
 

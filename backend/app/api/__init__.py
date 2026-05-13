@@ -3,7 +3,7 @@ API Routes
 """
 from fastapi import APIRouter
 
-from app.api import auth, llm, results, tasks, tenants, works
+from app.api import auth, dashboard, llm, results, tasks, tenants, works
 
 api_router = APIRouter(prefix="/api")
 
@@ -14,3 +14,4 @@ api_router.include_router(results.router)
 api_router.include_router(llm.router)
 api_router.include_router(tenants.router)        # /api/system/tenants — System Admin
 api_router.include_router(tenants.admin_router)  # /api/admin — Tenant Admin
+api_router.include_router(dashboard.router)

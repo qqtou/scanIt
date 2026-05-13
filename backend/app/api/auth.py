@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from jose import jwt
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -129,8 +129,11 @@ async def login(
             detail="Inactive user",
         )
 
-    # 更新最后登录时间
-    user.last_login_at = datetime.now(timezone.utc)
+    # 更新最后登录时间（使用原始 SQL 避免 SQLAlchemy ORM 追踪问题）
+    await db.execute(
+        text("UPDATE users SET last_login_at = :now WHERE id = :id"),
+        {"now": datetime.now(timezone.utc), "id": str(user.id)}
+    )
     await db.commit()
 
     # 创建访问令牌（包含 tenant_id 和 role）

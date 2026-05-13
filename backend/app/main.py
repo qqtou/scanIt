@@ -13,6 +13,7 @@ from app.api import api_router
 from app.core.config import settings
 from app.core.logging import logger
 from app.core.sentry import init_sentry
+from app.core.metrics import metrics_middleware
 from app.models.base import engine
 
 
