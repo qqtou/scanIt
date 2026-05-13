@@ -6,7 +6,7 @@ pydantic-settings==2.6.1
 
 # Task Queue
 celery==5.4.0
-redis==5.2.0
+redis==7.4.0
 
 # Database
 sqlalchemy==2.0.35
