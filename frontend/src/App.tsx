@@ -3,6 +3,7 @@ import { authApi } from "./api/client";
 import type { User } from "./api/client";
 
 // 页面组件
+import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Works from "./pages/Works";
 import Tasks from "./pages/Tasks";
@@ -59,8 +60,17 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [loading, setLoading] = useState(true);
+  const [isLoginPage, setIsLoginPage] = useState(false);
 
   useEffect(() => {
+    // 检查当前路径
+    const path = window.location.pathname;
+    if (path === "/login") {
+      setIsLoginPage(true);
+      setLoading(false);
+      return;
+    }
+
     const token = localStorage.getItem("access_token");
     if (token) {
       authApi.getMe()
@@ -88,6 +98,11 @@ function App() {
         <div className="spinner" />
       </div>
     );
+  }
+
+  // 渲染登录页
+  if (isLoginPage) {
+    return <Login />;
   }
 
   const navItems = [
